@@ -60,6 +60,45 @@
   };
 
 
+  // ===== Logger 模块 =====
+  BS.Logger = (function () {
+    var LEVELS = {
+      debug: 0,
+      info: 1,
+      warn: 2,
+      error: 3
+    };
+
+    var currentLevel = LEVELS.info;
+    var PREFIX = '[BangumiSync]';
+
+    function log(level, message) {
+      if (LEVELS[level] < currentLevel) return;
+      var fn = console[level] || console.log;
+      fn(PREFIX + ' ' + message);
+    }
+
+    function debug(message) { log('debug', message); }
+    function info(message) { log('info', message); }
+    function warn(message) { log('warn', message); }
+    function error(message) { log('error', message); }
+
+    function setLevel(level) {
+      if (LEVELS.hasOwnProperty(level)) {
+        currentLevel = LEVELS[level];
+      }
+    }
+
+    return {
+      debug: debug,
+      info: info,
+      warn: warn,
+      error: error,
+      setLevel: setLevel
+    };
+  })();
+
+
   // ===== Config 模块 =====
   BS.Config = (function () {
     var KEYS = {
@@ -247,16 +286,39 @@
 
     var SEASON_MARKERS = /^(\d{1,2})\s*月\s*(新番)?$/i;
 
+    var CACHE_SIZE = 20;
+    var cache = {};
+    var cacheKeys = [];
+
+    function getCache(key) {
+      return cache.hasOwnProperty(key) ? cache[key] : null;
+    }
+
+    function setCache(key, value) {
+      if (cacheKeys.length >= CACHE_SIZE) {
+        var oldest = cacheKeys.shift();
+        delete cache[oldest];
+      }
+      cacheKeys.push(key);
+      cache[key] = value;
+    }
+
     function extractEpisode(title) {
+      var cached = getCache('ep:' + title);
+      if (cached !== null) return cached;
+
       for (var i = 0; i < EP_PATTERNS.length; i++) {
         var m = title.match(EP_PATTERNS[i].regex);
         if (m) {
-          return {
+          var result = {
             ep: parseInt(m[1], 10),
             pattern: EP_PATTERNS[i].name
           };
+          setCache('ep:' + title, result);
+          return result;
         }
       }
+      setCache('ep:' + title, null);
       return null;
     }
 
@@ -291,11 +353,17 @@
     }
 
     function extractAnimeTitle(title) {
+      var cached = getCache('title:' + title);
+      if (cached !== null) return cached;
+
+      var result;
       var cornerMatch = title.match(/『([^』]+)』/);
       if (cornerMatch) {
         var cornerContent = cornerMatch[1].trim();
         if (!isPropertyTag(cornerContent)) {
-          return cleanTitle(cornerContent);
+          result = cleanTitle(cornerContent);
+          setCache('title:' + title, result);
+          return result;
         }
       }
 
@@ -304,9 +372,13 @@
         var bracketContent = bracketMatch[1].trim();
         if (isPropertyTag(bracketContent) || isSeasonMarker(bracketContent)) {
           var afterBracket = title.replace(/【[^】]+】/, '').trim();
-          return extractAnimeTitleFromCleaned(afterBracket);
+          result = extractAnimeTitleFromCleaned(afterBracket);
+          setCache('title:' + title, result);
+          return result;
         } else {
-          return cleanTitle(bracketContent);
+          result = cleanTitle(bracketContent);
+          setCache('title:' + title, result);
+          return result;
         }
       }
 
@@ -314,13 +386,19 @@
       if (squareMatch) {
         var squareContent = squareMatch[1].trim();
         if (!isPropertyTag(squareContent) && !/^\d+$/.test(squareContent)) {
-          return cleanTitle(squareContent);
+          result = cleanTitle(squareContent);
+          setCache('title:' + title, result);
+          return result;
         }
         var afterSquare = title.replace(/\[[^\]]+\]/, '').trim();
-        return cleanTitle(afterSquare);
+        result = cleanTitle(afterSquare);
+        setCache('title:' + title, result);
+        return result;
       }
 
-      return cleanTitle(title);
+      result = cleanTitle(title);
+      setCache('title:' + title, result);
+      return result;
     }
 
     function extractAnimeTitleFromCleaned(title) {
@@ -360,83 +438,120 @@
     var BASE_URL = 'https://api.bgm.tv';
     var USER_AGENT = 'BangumiSync/0.5.0 (UserScript)';
 
-    function request(method, path, data, needAuth, retryCount) {
+    var pendingRequests = {};
+    var DEDUP_TTL = 500;
+
+    function getRequestKey(method, url) {
+      return method + ' ' + url;
+    }
+
+    function dedupRequest(method, url, executeFn) {
+      var key = getRequestKey(method, url);
+      if (pendingRequests.hasOwnProperty(key)) {
+        return pendingRequests[key];
+      }
+
+      var promise = executeFn();
+      pendingRequests[key] = promise;
+
+      promise.then(function() {
+        setTimeout(function() {
+          delete pendingRequests[key];
+        }, DEDUP_TTL);
+      }).catch(function() {
+        setTimeout(function() {
+          delete pendingRequests[key];
+        }, DEDUP_TTL);
+      });
+
+      return promise;
+    }
+
+    function request(method, path, data, needAuth, retryCount, useDedup) {
       retryCount = retryCount || 0;
+      useDedup = useDedup !== false;
       var MAX_RETRIES = 3;
       var RETRY_DELAY_BASE = 1000;
 
-      return new Promise(function(resolve, reject) {
-        var token = BS.Config.getAccessToken();
-        if (needAuth && !token) {
-          reject(new Error('未配置 Access Token'));
-          return;
-        }
+      var executeFn = function() {
+        return new Promise(function(resolve, reject) {
+          var token = BS.Config.getAccessToken();
+          if (needAuth && !token) {
+            reject(new Error('未配置 Access Token'));
+            return;
+          }
 
-        var headers = { 'User-Agent': USER_AGENT };
-        if (needAuth) headers['Authorization'] = 'Bearer ' + token;
-        if (data && method !== 'GET') headers['Content-Type'] = 'application/json';
+          var headers = { 'User-Agent': USER_AGENT };
+          if (needAuth) headers['Authorization'] = 'Bearer ' + token;
+          if (data && method !== 'GET') headers['Content-Type'] = 'application/json';
 
-        var retryAttempt = 0;
+          var retryAttempt = 0;
 
-        function doRequest() {
-          BS.Platform.httpRequest({
-            method: method,
-            url: BASE_URL + path,
-            headers: headers,
-            data: data ? JSON.stringify(data) : null,
-            timeout: 30000,
-            onload: function(res) {
-              if (res.status >= 200 && res.status < 300) {
-                try {
-                  resolve(JSON.parse(res.responseText));
-                } catch (e) {
-                  resolve(res.responseText);
-                }
-              } else {
-                // 指数退避重试：只在服务器错误或超时时重试
-                if ((res.status >= 500 || res.status === 0) && retryAttempt < MAX_RETRIES) {
-                  retryAttempt++;
-                  var delay = RETRY_DELAY_BASE * Math.pow(2, retryAttempt - 1);
-                  console.log('[BangumiSync] 请求失败，' + delay + 'ms 后第 ' + retryAttempt + ' 次重试');
-                  setTimeout(doRequest, delay);
-                } else {
+          function doRequest() {
+            BS.Platform.httpRequest({
+              method: method,
+              url: BASE_URL + path,
+              headers: headers,
+              data: data ? JSON.stringify(data) : null,
+              timeout: 30000,
+              onload: function(res) {
+                if (res.status >= 200 && res.status < 300) {
                   try {
-                    var err = JSON.parse(res.responseText);
-                    reject(new Error(err.message || err.error || '请求失败'));
+                    resolve(JSON.parse(res.responseText));
                   } catch (e) {
-                    reject(new Error('请求失败: ' + res.status));
+                    resolve(res.responseText);
+                  }
+                } else {
+                  // 指数退避重试：只在服务器错误或超时时重试
+                  if ((res.status >= 500 || res.status === 0) && retryAttempt < MAX_RETRIES) {
+                    retryAttempt++;
+                    var delay = RETRY_DELAY_BASE * Math.pow(2, retryAttempt - 1);
+                    console.log('[BangumiSync] 请求失败，' + delay + 'ms 后第 ' + retryAttempt + ' 次重试');
+                    setTimeout(doRequest, delay);
+                  } else {
+                    try {
+                      var err = JSON.parse(res.responseText);
+                      reject(new Error(err.message || err.error || '请求失败'));
+                    } catch (e) {
+                      reject(new Error('请求失败: ' + res.status));
+                    }
                   }
                 }
+              },
+              onerror: function() {
+                if (retryAttempt < MAX_RETRIES) {
+                  retryAttempt++;
+                  var delay = RETRY_DELAY_BASE * Math.pow(2, retryAttempt - 1);
+                  console.log('[BangumiSync] 网络错误，' + delay + 'ms 后第 ' + retryAttempt + ' 次重试');
+                  setTimeout(doRequest, delay);
+                } else {
+                  reject(new Error('网络请求失败，已重试' + MAX_RETRIES + '次'));
+                }
+              },
+              ontimeout: function() {
+                if (retryAttempt < MAX_RETRIES) {
+                  retryAttempt++;
+                  var delay = RETRY_DELAY_BASE * Math.pow(2, retryAttempt - 1);
+                  console.log('[BangumiSync] 请求超时，' + delay + 'ms 后第 ' + retryAttempt + ' 次重试');
+                  setTimeout(doRequest, delay);
+                } else {
+                  reject(new Error('请求超时，请检查网络连接，已重试' + MAX_RETRIES + '次'));
+                }
+              },
+              onabort: function() {
+                reject(new Error('请求被中断'));
               }
-            },
-            onerror: function() {
-              if (retryAttempt < MAX_RETRIES) {
-                retryAttempt++;
-                var delay = RETRY_DELAY_BASE * Math.pow(2, retryAttempt - 1);
-                console.log('[BangumiSync] 网络错误，' + delay + 'ms 后第 ' + retryAttempt + ' 次重试');
-                setTimeout(doRequest, delay);
-              } else {
-                reject(new Error('网络请求失败，已重试' + MAX_RETRIES + '次'));
-              }
-            },
-            ontimeout: function() {
-              if (retryAttempt < MAX_RETRIES) {
-                retryAttempt++;
-                var delay = RETRY_DELAY_BASE * Math.pow(2, retryAttempt - 1);
-                console.log('[BangumiSync] 请求超时，' + delay + 'ms 后第 ' + retryAttempt + ' 次重试');
-                setTimeout(doRequest, delay);
-              } else {
-                reject(new Error('请求超时，请检查网络连接，已重试' + MAX_RETRIES + '次'));
-              }
-            },
-            onabort: function() {
-              reject(new Error('请求被中断'));
-            }
-          });
-        }
+            });
+          }
 
-        doRequest();
-      });
+          doRequest();
+        });
+      };
+
+      if (useDedup) {
+        return dedupRequest(method, BASE_URL + path, executeFn);
+      }
+      return executeFn();
     }
 
     function verifyToken() {
@@ -481,7 +596,6 @@
     var ballState = {
       hidden: false
     };
-    var fullscreenCheckInterval = null;
 
     // 样式
     var STYLES = [
@@ -682,15 +796,7 @@
         console.log('[BangumiSync] 已监听播放器类名变化');
       }
 
-      fullscreenCheckInterval = setInterval(handleFullscreenChange, 1000);
       setTimeout(handleFullscreenChange, 500);
-    }
-
-    function cleanup() {
-      if (fullscreenCheckInterval) {
-        clearInterval(fullscreenCheckInterval);
-        fullscreenCheckInterval = null;
-      }
     }
 
     var BGM_LOGO_SVG = '<svg class="bgm-logo" viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg">' +
@@ -830,13 +936,7 @@
         });
     }
 
-    function showSearchResults(candidates, videoInfo) {
-      closeOverlay();
-
-      var panel = document.createElement('div');
-      panel.id = 'bgm-sync-panel';
-      panel.style.width = '500px';
-
+    function tmplSearchResults(candidates) {
       var itemsHtml = candidates.map(function(item, idx) {
         var name = item.name_cn || item.name || '未知';
         var origName = item.name || '';
@@ -851,7 +951,7 @@
         ].join('');
       }).join('');
 
-      panel.innerHTML = [
+      return [
         '<div style="padding:14px 16px;background:#fb7299;color:#fff;font-weight:600;display:flex;justify-content:space-between;align-items:center">',
         '<span>搜索结果</span>',
         '<span id="bgm-close" style="cursor:pointer;font-size:20px">×</span>',
@@ -861,6 +961,15 @@
         '<button id="bgm-manual-search" style="padding:6px 12px;border:1px solid #ddd;border-radius:4px;background:#fff;cursor:pointer">没有我要的，手动输入搜索</button>',
         '</div>'
       ].join('');
+    }
+
+    function showSearchResults(candidates, videoInfo) {
+      closeOverlay();
+
+      var panel = document.createElement('div');
+      panel.id = 'bgm-sync-panel';
+      panel.style.width = '500px';
+      panel.innerHTML = tmplSearchResults(candidates);
 
       document.body.appendChild(panel);
 
@@ -889,20 +998,11 @@
       }
     }
 
-    function showEpisodeInput(subject, videoInfo) {
-      closeOverlay();
-
-      var epResult = BS.Matcher.extractEpisode(videoInfo.title);
-      var detectedEp = epResult ? epResult.ep : null;
-
-      var panel = document.createElement('div');
-      panel.id = 'bgm-sync-panel';
-      panel.style.width = '400px';
-
+    function tmplEpisodeInput(subject, videoInfo, detectedEp) {
       var subjectName = subject.name_cn || subject.name || '未知番剧';
       var detectedText = detectedEp ? '识别到集数: 第 ' + detectedEp + ' 话' : '未识别到集数，请手动输入';
 
-      panel.innerHTML = [
+      return [
         '<div style="padding:14px 16px;background:#fb7299;color:#fff;font-weight:600;display:flex;justify-content:space-between;align-items:center">',
         '<span>同步到 Bangumi</span>',
         '<span id="bgm-close" style="cursor:pointer;font-size:20px">×</span>',
@@ -930,6 +1030,18 @@
         '</div>',
         '</div>'
       ].join('');
+    }
+
+    function showEpisodeInput(subject, videoInfo) {
+      closeOverlay();
+
+      var epResult = BS.Matcher.extractEpisode(videoInfo.title);
+      var detectedEp = epResult ? epResult.ep : null;
+
+      var panel = document.createElement('div');
+      panel.id = 'bgm-sync-panel';
+      panel.style.width = '400px';
+      panel.innerHTML = tmplEpisodeInput(subject, videoInfo, detectedEp);
 
       document.body.appendChild(panel);
 
@@ -1052,10 +1164,7 @@
       showToast('已添加 UP: ' + info.upName, 'success');
     }
 
-    function showSettingsPanel() {
-      closeOverlay();
-
-      var upList = BS.Config.getUpWhitelist();
+    function tmplSettingsPanel(upList, configs) {
       var upHtml = upList.map(function(up, idx) {
         return [
           '<div style="display:flex;justify-content:space-between;align-items:center;padding:8px 0;border-bottom:1px solid #eee">',
@@ -1068,15 +1177,7 @@
         ].join('');
       }).join('');
 
-      var panel = document.createElement('div');
-      panel.id = 'bgm-sync-panel';
-      panel.style.width = '450px';
-
-      var hideOnWide = BS.Config.getHideOnWide();
-      var enableDedup = BS.Config.getEnableDedup();
-      var autoSyncMode = BS.Config.getAutoSyncMode();
-
-      panel.innerHTML = [
+      return [
         '<div style="padding:14px 16px;background:#fb7299;color:#fff;font-weight:600;display:flex;justify-content:space-between;align-items:center">',
         '<span>设置</span>',
         '<span id="bgm-close" style="cursor:pointer;font-size:20px">×</span>',
@@ -1084,7 +1185,7 @@
         '<div style="padding:20px;max-height:60vh;overflow:auto">',
         '<div style="margin-bottom:20px">',
         '<div style="font-size:13px;color:#666;margin-bottom:8px">Access Token</div>',
-        '<input id="bgm-token-input" type="text" value="' + BS.Config.getAccessToken() + '" placeholder="在 next.bgm.tv/demo/access-token 生成" style="width:100%;padding:10px;border:1px solid #ddd;border-radius:6px;font-size:14px;box-sizing:border-box">',
+        '<input id="bgm-token-input" type="text" value="' + configs.token + '" placeholder="在 next.bgm.tv/demo/access-token 生成" style="width:100%;padding:10px;border:1px solid #ddd;border-radius:6px;font-size:14px;box-sizing:border-box">',
         '<div style="font-size:12px;color:#999;margin-top:4px">Token 地址: <a href="https://next.bgm.tv/demo/access-token" target="_blank" style="color:#fb7299">next.bgm.tv/demo/access-token</a></div>',
         '</div>',
         '<div style="margin-bottom:20px">',
@@ -1099,28 +1200,28 @@
         '<div style="margin-bottom:20px;padding:12px;background:#f9f9f9;border-radius:8px">',
         '<div style="font-size:13px;color:#666;margin-bottom:8px;font-weight:500">自动同步模式</div>',
         '<label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-size:14px;margin-bottom:8px">',
-        '<input name="bgm-auto-sync-mode" type="radio" value="off" ' + (autoSyncMode === 'off' ? 'checked' : '') + ' style="width:16px;height:16px;cursor:pointer">',
+        '<input name="bgm-auto-sync-mode" type="radio" value="off" ' + (configs.autoSyncMode === 'off' ? 'checked' : '') + ' style="width:16px;height:16px;cursor:pointer">',
         '<span>关闭 — 保持现有手动流程</span>',
         '</label>',
         '<label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-size:14px;margin-bottom:8px">',
-        '<input name="bgm-auto-sync-mode" type="radio" value="assist" ' + (autoSyncMode === 'assist' ? 'checked' : '') + ' style="width:16px;height:16px;cursor:pointer">',
+        '<input name="bgm-auto-sync-mode" type="radio" value="assist" ' + (configs.autoSyncMode === 'assist' ? 'checked' : '') + ' style="width:16px;height:16px;cursor:pointer">',
         '<span>智能辅助 — 自动搜索，点击悬浮球快速同步</span>',
         '</label>',
         '<label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-size:14px">',
-        '<input name="bgm-auto-sync-mode" type="radio" value="auto" ' + (autoSyncMode === 'auto' ? 'checked' : '') + ' style="width:16px;height:16px;cursor:pointer">',
+        '<input name="bgm-auto-sync-mode" type="radio" value="auto" ' + (configs.autoSyncMode === 'auto' ? 'checked' : '') + ' style="width:16px;height:16px;cursor:pointer">',
         '<span style="color:#ff4d4f">全自动（实验性）⚠️ — 播放后自动同步，无需操作</span>',
         '</label>',
         '</div>',
         '<div style="margin-bottom:16px;padding:12px;background:#f9f9f9;border-radius:8px">',
         '<label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-size:14px">',
-        '<input id="bgm-hide-wide" type="checkbox" ' + (hideOnWide ? 'checked' : '') + ' style="width:16px;height:16px;cursor:pointer">',
+        '<input id="bgm-hide-wide" type="checkbox" ' + (configs.hideOnWide ? 'checked' : '') + ' style="width:16px;height:16px;cursor:pointer">',
         '<span>视频宽屏/全屏时自动隐藏悬浮球</span>',
         '</label>',
         '<div style="font-size:12px;color:#999;margin-top:4px;margin-left:24px">避免遮挡视频画面</div>',
         '</div>',
         '<div style="margin-bottom:20px;padding:12px;background:#f9f9f9;border-radius:8px">',
         '<label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-size:14px">',
-        '<input id="bgm-enable-dedup" type="checkbox" ' + (enableDedup ? 'checked' : '') + ' style="width:16px;height:16px;cursor:pointer">',
+        '<input id="bgm-enable-dedup" type="checkbox" ' + (configs.enableDedup ? 'checked' : '') + ' style="width:16px;height:16px;cursor:pointer">',
         '<span>24小时内防重复同步</span>',
         '</label>',
         '<div style="font-size:12px;color:#999;margin-top:4px;margin-left:24px">开启后，同一集在24小时内不会重复同步</div>',
@@ -1131,6 +1232,25 @@
         '</div>',
         '</div>'
       ].join('');
+    }
+
+    function showSettingsPanel() {
+      closeOverlay();
+
+      var upList = BS.Config.getUpWhitelist();
+
+      var panel = document.createElement('div');
+      panel.id = 'bgm-sync-panel';
+      panel.style.width = '450px';
+
+      var configs = {
+        token: BS.Config.getAccessToken(),
+        hideOnWide: BS.Config.getHideOnWide(),
+        enableDedup: BS.Config.getEnableDedup(),
+        autoSyncMode: BS.Config.getAutoSyncMode()
+      };
+
+      panel.innerHTML = tmplSettingsPanel(upList, configs);
 
       document.body.appendChild(panel);
 
@@ -1341,8 +1461,8 @@
   BS.VideoObserver = (function () {
     var hasTriggered = false;
     var currentUrl = '';
-    var urlCheckInterval = null;
     var videoPlayHandler = null;
+    var titleObserver = null;
 
     function findMainVideo() {
       var videos = document.querySelectorAll('video');
@@ -1416,7 +1536,7 @@
       return false;
     }
 
-    function checkUrlChange() {
+    function handleUrlChange() {
       if (location.href !== currentUrl) {
         currentUrl = location.href;
         hasTriggered = false;
@@ -1436,19 +1556,37 @@
       }
     }
 
+    function setupUrlChangeDetection() {
+      // 监听 popstate（SPA 路由变化）
+      window.addEventListener('popstate', handleUrlChange);
+
+      // 监听 title 变化（B 站切换视频时通常会更新标题）
+      var titleEl = document.querySelector('title');
+      if (titleEl) {
+        titleObserver = new MutationObserver(function() {
+          handleUrlChange();
+        });
+        titleObserver.observe(titleEl, { childList: true });
+      }
+
+      // 监听 hashchange 作为兜底
+      window.addEventListener('hashchange', handleUrlChange);
+    }
+
     function init() {
       currentUrl = location.href;
       hasTriggered = false;
       observeVideo();
-
-      urlCheckInterval = setInterval(checkUrlChange, 1000);
+      setupUrlChangeDetection();
     }
 
     function destroy() {
-      if (urlCheckInterval) {
-        clearInterval(urlCheckInterval);
-        urlCheckInterval = null;
+      if (titleObserver) {
+        titleObserver.disconnect();
+        titleObserver = null;
       }
+      window.removeEventListener('popstate', handleUrlChange);
+      window.removeEventListener('hashchange', handleUrlChange);
       if (videoPlayHandler) {
         var video = findMainVideo();
         if (video) {
@@ -1485,19 +1623,59 @@
     var currentSearchPromise = null;
     var isCancelled = false;
 
+    function levenshtein(a, b) {
+      var m = a.length, n = b.length;
+      if (m === 0) return n;
+      if (n === 0) return m;
+
+      var matrix = [];
+      for (var i = 0; i <= m; i++) {
+        matrix[i] = [i];
+      }
+      for (var j = 0; j <= n; j++) {
+        matrix[0][j] = j;
+      }
+
+      for (var i = 1; i <= m; i++) {
+        for (var j = 1; j <= n; j++) {
+          var cost = a[i - 1] === b[j - 1] ? 0 : 1;
+          matrix[i][j] = Math.min(
+            matrix[i - 1][j] + 1,
+            matrix[i][j - 1] + 1,
+            matrix[i - 1][j - 1] + cost
+          );
+        }
+      }
+
+      return matrix[m][n];
+    }
+
+    function levenshteinSimilarity(a, b) {
+      var maxLen = Math.max(a.length, b.length);
+      if (maxLen === 0) return 1.0;
+      var distance = levenshtein(a, b);
+      return 1 - distance / maxLen;
+    }
+
     function similarity(a, b) {
       if (!a || !b) return 0;
       a = a.toLowerCase().replace(/\s+/g, '');
       b = b.toLowerCase().replace(/\s+/g, '');
       if (a === b) return 1.0;
 
+      // 字符重叠率
       var setA = {};
       for (var i = 0; i < a.length; i++) setA[a[i]] = true;
       var overlap = 0;
       for (var i = 0; i < b.length; i++) {
         if (setA[b[i]]) overlap++;
       }
-      return overlap / Math.max(a.length, b.length);
+      var overlapScore = overlap / Math.max(a.length, b.length);
+
+      // Levenshtein 相似度
+      var levScore = levenshteinSimilarity(a, b);
+
+      return Math.max(overlapScore, levScore);
     }
 
     function getState() {
