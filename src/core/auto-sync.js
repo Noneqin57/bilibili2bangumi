@@ -18,19 +18,59 @@ BS.AutoSync = (function () {
   var currentSearchPromise = null;
   var isCancelled = false;
 
+  function levenshtein(a, b) {
+    var m = a.length, n = b.length;
+    if (m === 0) return n;
+    if (n === 0) return m;
+
+    var matrix = [];
+    for (var i = 0; i <= m; i++) {
+      matrix[i] = [i];
+    }
+    for (var j = 0; j <= n; j++) {
+      matrix[0][j] = j;
+    }
+
+    for (var i = 1; i <= m; i++) {
+      for (var j = 1; j <= n; j++) {
+        var cost = a[i - 1] === b[j - 1] ? 0 : 1;
+        matrix[i][j] = Math.min(
+          matrix[i - 1][j] + 1,
+          matrix[i][j - 1] + 1,
+          matrix[i - 1][j - 1] + cost
+        );
+      }
+    }
+
+    return matrix[m][n];
+  }
+
+  function levenshteinSimilarity(a, b) {
+    var maxLen = Math.max(a.length, b.length);
+    if (maxLen === 0) return 1.0;
+    var distance = levenshtein(a, b);
+    return 1 - distance / maxLen;
+  }
+
   function similarity(a, b) {
     if (!a || !b) return 0;
     a = a.toLowerCase().replace(/\s+/g, '');
     b = b.toLowerCase().replace(/\s+/g, '');
     if (a === b) return 1.0;
 
+    // 字符重叠率
     var setA = {};
     for (var i = 0; i < a.length; i++) setA[a[i]] = true;
     var overlap = 0;
     for (var i = 0; i < b.length; i++) {
       if (setA[b[i]]) overlap++;
     }
-    return overlap / Math.max(a.length, b.length);
+    var overlapScore = overlap / Math.max(a.length, b.length);
+
+    // Levenshtein 相似度
+    var levScore = levenshteinSimilarity(a, b);
+
+    return Math.max(overlapScore, levScore);
   }
 
   function getState() {
