@@ -4,8 +4,8 @@
 BS.VideoObserver = (function () {
   var hasTriggered = false;
   var currentUrl = '';
-  var urlCheckInterval = null;
   var videoPlayHandler = null;
+  var titleObserver = null;
 
   function findMainVideo() {
     var videos = document.querySelectorAll('video');
@@ -79,7 +79,7 @@ BS.VideoObserver = (function () {
     return false;
   }
 
-  function checkUrlChange() {
+  function handleUrlChange() {
     if (location.href !== currentUrl) {
       currentUrl = location.href;
       hasTriggered = false;
@@ -99,19 +99,37 @@ BS.VideoObserver = (function () {
     }
   }
 
+  function setupUrlChangeDetection() {
+    // 监听 popstate（SPA 路由变化）
+    window.addEventListener('popstate', handleUrlChange);
+
+    // 监听 title 变化（B 站切换视频时通常会更新标题）
+    var titleEl = document.querySelector('title');
+    if (titleEl) {
+      titleObserver = new MutationObserver(function() {
+        handleUrlChange();
+      });
+      titleObserver.observe(titleEl, { childList: true });
+    }
+
+    // 监听 hashchange 作为兜底
+    window.addEventListener('hashchange', handleUrlChange);
+  }
+
   function init() {
     currentUrl = location.href;
     hasTriggered = false;
     observeVideo();
-
-    urlCheckInterval = setInterval(checkUrlChange, 1000);
+    setupUrlChangeDetection();
   }
 
   function destroy() {
-    if (urlCheckInterval) {
-      clearInterval(urlCheckInterval);
-      urlCheckInterval = null;
+    if (titleObserver) {
+      titleObserver.disconnect();
+      titleObserver = null;
     }
+    window.removeEventListener('popstate', handleUrlChange);
+    window.removeEventListener('hashchange', handleUrlChange);
     if (videoPlayHandler) {
       var video = findMainVideo();
       if (video) {
