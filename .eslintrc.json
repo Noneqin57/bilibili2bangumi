@@ -1,0 +1,32 @@
+{
+  "env": {
+    "browser": true,
+    "es2021": true,
+    "greasemonkey": true
+  },
+  "extends": "eslint:recommended",
+  "parserOptions": {
+    "ecmaVersion": 5,
+    "sourceType": "script"
+  },
+  "rules": {
+    "indent": ["error", 2],
+    "quotes": ["error", "single"],
+    "semi": ["error", "always"],
+    "no-unused-vars": ["warn", { "vars": "all", "args": "none" }],
+    "no-console": "off"
+  },
+  "globals": {
+    "BS": "writable",
+    "GM_getValue": "readonly",
+    "GM_setValue": "readonly",
+    "GM_xmlhttpRequest": "readonly",
+    "GM_registerMenuCommand": "readonly",
+    "GM_addStyle": "readonly"
+  },
+  "ignorePatterns": [
+    "bilibili2bangumi.user.js",
+    "edge-extension/injected.js",
+    "node_modules/"
+  ]
+}
