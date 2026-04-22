@@ -3,7 +3,6 @@ BS.UI = (function () {
   var ballState = {
     hidden: false
   };
-  var fullscreenCheckInterval = null;
 
   // 样式
   var STYLES = [
@@ -204,15 +203,7 @@ BS.UI = (function () {
       console.log('[BangumiSync] 已监听播放器类名变化');
     }
 
-    fullscreenCheckInterval = setInterval(handleFullscreenChange, 1000);
     setTimeout(handleFullscreenChange, 500);
-  }
-
-  function cleanup() {
-    if (fullscreenCheckInterval) {
-      clearInterval(fullscreenCheckInterval);
-      fullscreenCheckInterval = null;
-    }
   }
 
   var BGM_LOGO_SVG = '<svg class="bgm-logo" viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg">' +
@@ -352,13 +343,7 @@ BS.UI = (function () {
       });
   }
 
-  function showSearchResults(candidates, videoInfo) {
-    closeOverlay();
-
-    var panel = document.createElement('div');
-    panel.id = 'bgm-sync-panel';
-    panel.style.width = '500px';
-
+  function tmplSearchResults(candidates) {
     var itemsHtml = candidates.map(function(item, idx) {
       var name = item.name_cn || item.name || '未知';
       var origName = item.name || '';
@@ -373,7 +358,7 @@ BS.UI = (function () {
       ].join('');
     }).join('');
 
-    panel.innerHTML = [
+    return [
       '<div style="padding:14px 16px;background:#fb7299;color:#fff;font-weight:600;display:flex;justify-content:space-between;align-items:center">',
       '<span>搜索结果</span>',
       '<span id="bgm-close" style="cursor:pointer;font-size:20px">×</span>',
@@ -383,6 +368,15 @@ BS.UI = (function () {
       '<button id="bgm-manual-search" style="padding:6px 12px;border:1px solid #ddd;border-radius:4px;background:#fff;cursor:pointer">没有我要的，手动输入搜索</button>',
       '</div>'
     ].join('');
+  }
+
+  function showSearchResults(candidates, videoInfo) {
+    closeOverlay();
+
+    var panel = document.createElement('div');
+    panel.id = 'bgm-sync-panel';
+    panel.style.width = '500px';
+    panel.innerHTML = tmplSearchResults(candidates);
 
     document.body.appendChild(panel);
 
@@ -411,20 +405,11 @@ BS.UI = (function () {
     }
   }
 
-  function showEpisodeInput(subject, videoInfo) {
-    closeOverlay();
-
-    var epResult = BS.Matcher.extractEpisode(videoInfo.title);
-    var detectedEp = epResult ? epResult.ep : null;
-
-    var panel = document.createElement('div');
-    panel.id = 'bgm-sync-panel';
-    panel.style.width = '400px';
-
+  function tmplEpisodeInput(subject, videoInfo, detectedEp) {
     var subjectName = subject.name_cn || subject.name || '未知番剧';
     var detectedText = detectedEp ? '识别到集数: 第 ' + detectedEp + ' 话' : '未识别到集数，请手动输入';
 
-    panel.innerHTML = [
+    return [
       '<div style="padding:14px 16px;background:#fb7299;color:#fff;font-weight:600;display:flex;justify-content:space-between;align-items:center">',
       '<span>同步到 Bangumi</span>',
       '<span id="bgm-close" style="cursor:pointer;font-size:20px">×</span>',
@@ -452,6 +437,18 @@ BS.UI = (function () {
       '</div>',
       '</div>'
     ].join('');
+  }
+
+  function showEpisodeInput(subject, videoInfo) {
+    closeOverlay();
+
+    var epResult = BS.Matcher.extractEpisode(videoInfo.title);
+    var detectedEp = epResult ? epResult.ep : null;
+
+    var panel = document.createElement('div');
+    panel.id = 'bgm-sync-panel';
+    panel.style.width = '400px';
+    panel.innerHTML = tmplEpisodeInput(subject, videoInfo, detectedEp);
 
     document.body.appendChild(panel);
 
@@ -574,10 +571,7 @@ BS.UI = (function () {
     showToast('已添加 UP: ' + info.upName, 'success');
   }
 
-  function showSettingsPanel() {
-    closeOverlay();
-
-    var upList = BS.Config.getUpWhitelist();
+  function tmplSettingsPanel(upList, configs) {
     var upHtml = upList.map(function(up, idx) {
       return [
         '<div style="display:flex;justify-content:space-between;align-items:center;padding:8px 0;border-bottom:1px solid #eee">',
@@ -590,15 +584,7 @@ BS.UI = (function () {
       ].join('');
     }).join('');
 
-    var panel = document.createElement('div');
-    panel.id = 'bgm-sync-panel';
-    panel.style.width = '450px';
-
-    var hideOnWide = BS.Config.getHideOnWide();
-    var enableDedup = BS.Config.getEnableDedup();
-    var autoSyncMode = BS.Config.getAutoSyncMode();
-
-    panel.innerHTML = [
+    return [
       '<div style="padding:14px 16px;background:#fb7299;color:#fff;font-weight:600;display:flex;justify-content:space-between;align-items:center">',
       '<span>设置</span>',
       '<span id="bgm-close" style="cursor:pointer;font-size:20px">×</span>',
@@ -606,7 +592,7 @@ BS.UI = (function () {
       '<div style="padding:20px;max-height:60vh;overflow:auto">',
       '<div style="margin-bottom:20px">',
       '<div style="font-size:13px;color:#666;margin-bottom:8px">Access Token</div>',
-      '<input id="bgm-token-input" type="text" value="' + BS.Config.getAccessToken() + '" placeholder="在 next.bgm.tv/demo/access-token 生成" style="width:100%;padding:10px;border:1px solid #ddd;border-radius:6px;font-size:14px;box-sizing:border-box">',
+      '<input id="bgm-token-input" type="text" value="' + configs.token + '" placeholder="在 next.bgm.tv/demo/access-token 生成" style="width:100%;padding:10px;border:1px solid #ddd;border-radius:6px;font-size:14px;box-sizing:border-box">',
       '<div style="font-size:12px;color:#999;margin-top:4px">Token 地址: <a href="https://next.bgm.tv/demo/access-token" target="_blank" style="color:#fb7299">next.bgm.tv/demo/access-token</a></div>',
       '</div>',
       '<div style="margin-bottom:20px">',
@@ -621,28 +607,28 @@ BS.UI = (function () {
       '<div style="margin-bottom:20px;padding:12px;background:#f9f9f9;border-radius:8px">',
       '<div style="font-size:13px;color:#666;margin-bottom:8px;font-weight:500">自动同步模式</div>',
       '<label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-size:14px;margin-bottom:8px">',
-      '<input name="bgm-auto-sync-mode" type="radio" value="off" ' + (autoSyncMode === 'off' ? 'checked' : '') + ' style="width:16px;height:16px;cursor:pointer">',
+      '<input name="bgm-auto-sync-mode" type="radio" value="off" ' + (configs.autoSyncMode === 'off' ? 'checked' : '') + ' style="width:16px;height:16px;cursor:pointer">',
       '<span>关闭 — 保持现有手动流程</span>',
       '</label>',
       '<label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-size:14px;margin-bottom:8px">',
-      '<input name="bgm-auto-sync-mode" type="radio" value="assist" ' + (autoSyncMode === 'assist' ? 'checked' : '') + ' style="width:16px;height:16px;cursor:pointer">',
+      '<input name="bgm-auto-sync-mode" type="radio" value="assist" ' + (configs.autoSyncMode === 'assist' ? 'checked' : '') + ' style="width:16px;height:16px;cursor:pointer">',
       '<span>智能辅助 — 自动搜索，点击悬浮球快速同步</span>',
       '</label>',
       '<label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-size:14px">',
-      '<input name="bgm-auto-sync-mode" type="radio" value="auto" ' + (autoSyncMode === 'auto' ? 'checked' : '') + ' style="width:16px;height:16px;cursor:pointer">',
+      '<input name="bgm-auto-sync-mode" type="radio" value="auto" ' + (configs.autoSyncMode === 'auto' ? 'checked' : '') + ' style="width:16px;height:16px;cursor:pointer">',
       '<span style="color:#ff4d4f">全自动（实验性）⚠️ — 播放后自动同步，无需操作</span>',
       '</label>',
       '</div>',
       '<div style="margin-bottom:16px;padding:12px;background:#f9f9f9;border-radius:8px">',
       '<label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-size:14px">',
-      '<input id="bgm-hide-wide" type="checkbox" ' + (hideOnWide ? 'checked' : '') + ' style="width:16px;height:16px;cursor:pointer">',
+      '<input id="bgm-hide-wide" type="checkbox" ' + (configs.hideOnWide ? 'checked' : '') + ' style="width:16px;height:16px;cursor:pointer">',
       '<span>视频宽屏/全屏时自动隐藏悬浮球</span>',
       '</label>',
       '<div style="font-size:12px;color:#999;margin-top:4px;margin-left:24px">避免遮挡视频画面</div>',
       '</div>',
       '<div style="margin-bottom:20px;padding:12px;background:#f9f9f9;border-radius:8px">',
       '<label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-size:14px">',
-      '<input id="bgm-enable-dedup" type="checkbox" ' + (enableDedup ? 'checked' : '') + ' style="width:16px;height:16px;cursor:pointer">',
+      '<input id="bgm-enable-dedup" type="checkbox" ' + (configs.enableDedup ? 'checked' : '') + ' style="width:16px;height:16px;cursor:pointer">',
       '<span>24小时内防重复同步</span>',
       '</label>',
       '<div style="font-size:12px;color:#999;margin-top:4px;margin-left:24px">开启后，同一集在24小时内不会重复同步</div>',
@@ -653,6 +639,25 @@ BS.UI = (function () {
       '</div>',
       '</div>'
     ].join('');
+  }
+
+  function showSettingsPanel() {
+    closeOverlay();
+
+    var upList = BS.Config.getUpWhitelist();
+
+    var panel = document.createElement('div');
+    panel.id = 'bgm-sync-panel';
+    panel.style.width = '450px';
+
+    var configs = {
+      token: BS.Config.getAccessToken(),
+      hideOnWide: BS.Config.getHideOnWide(),
+      enableDedup: BS.Config.getEnableDedup(),
+      autoSyncMode: BS.Config.getAutoSyncMode()
+    };
+
+    panel.innerHTML = tmplSettingsPanel(upList, configs);
 
     document.body.appendChild(panel);
 
