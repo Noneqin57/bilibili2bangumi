@@ -47,6 +47,28 @@ function replacePlaceholders(content, platform) {
     .replace(/__PLATFORM__/g, platform);
 }
 
+function formatBytes(bytes) {
+  if (bytes === 0) return '0 B';
+  var k = 1024;
+  var sizes = ['B', 'KB', 'MB'];
+  var i = Math.floor(Math.log(bytes) / Math.log(k));
+  return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
+}
+
+function checkVersionConsistency() {
+  try {
+    var manifest = JSON.parse(fs.readFileSync('edge-extension/manifest.json', 'utf-8'));
+    if (manifest.version !== VERSION) {
+      console.warn('⚠️  版本不一致: build.js 中是 ' + VERSION + '，manifest.json 中是 ' + manifest.version);
+      console.warn('   请同步更新版本号');
+    } else {
+      console.log('✓ 版本号一致: ' + VERSION);
+    }
+  } catch (e) {
+    console.warn('⚠️  无法读取 manifest.json 进行版本校验');
+  }
+}
+
 function buildUserscript() {
   console.log('Building userscript...');
 
@@ -76,6 +98,8 @@ function buildUserscript() {
 
   fs.writeFileSync('bilibili2bangumi.user.js', output);
   console.log('✓ bilibili2bangumi.user.js generated');
+  var stats = fs.statSync('bilibili2bangumi.user.js');
+  console.log('  Size: ' + formatBytes(stats.size));
 }
 
 function buildExtension() {
@@ -107,11 +131,17 @@ function buildExtension() {
 
   fs.writeFileSync('edge-extension/injected.js', output);
   console.log('✓ edge-extension/injected.js generated');
+  var stats = fs.statSync('edge-extension/injected.js');
+  console.log('  Size: ' + formatBytes(stats.size));
 }
 
 function main() {
   console.log('=== bilibili2bangumi build ===');
   console.log('Version:', VERSION);
+  console.log('Time:', new Date().toLocaleString());
+  console.log('');
+
+  checkVersionConsistency();
   console.log('');
 
   buildUserscript();
