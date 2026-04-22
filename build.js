@@ -5,6 +5,7 @@ const VERSION = '0.5.0';
 
 const CORE_FILES = [
   'src/platforms/PLATFORM-adapter.js',
+  'src/core/logger.js',
   'src/core/config.js',
   'src/core/matcher.js',
   'src/core/bangumi-api.js',
