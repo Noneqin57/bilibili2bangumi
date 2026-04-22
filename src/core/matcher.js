@@ -21,16 +21,39 @@ BS.Matcher = (function () {
 
   var SEASON_MARKERS = /^(\d{1,2})\s*月\s*(新番)?$/i;
 
+  var CACHE_SIZE = 20;
+  var cache = {};
+  var cacheKeys = [];
+
+  function getCache(key) {
+    return cache.hasOwnProperty(key) ? cache[key] : null;
+  }
+
+  function setCache(key, value) {
+    if (cacheKeys.length >= CACHE_SIZE) {
+      var oldest = cacheKeys.shift();
+      delete cache[oldest];
+    }
+    cacheKeys.push(key);
+    cache[key] = value;
+  }
+
   function extractEpisode(title) {
+    var cached = getCache('ep:' + title);
+    if (cached !== null) return cached;
+
     for (var i = 0; i < EP_PATTERNS.length; i++) {
       var m = title.match(EP_PATTERNS[i].regex);
       if (m) {
-        return {
+        var result = {
           ep: parseInt(m[1], 10),
           pattern: EP_PATTERNS[i].name
         };
+        setCache('ep:' + title, result);
+        return result;
       }
     }
+    setCache('ep:' + title, null);
     return null;
   }
 
@@ -65,11 +88,17 @@ BS.Matcher = (function () {
   }
 
   function extractAnimeTitle(title) {
+    var cached = getCache('title:' + title);
+    if (cached !== null) return cached;
+
+    var result;
     var cornerMatch = title.match(/『([^』]+)』/);
     if (cornerMatch) {
       var cornerContent = cornerMatch[1].trim();
       if (!isPropertyTag(cornerContent)) {
-        return cleanTitle(cornerContent);
+        result = cleanTitle(cornerContent);
+        setCache('title:' + title, result);
+        return result;
       }
     }
 
@@ -78,9 +107,13 @@ BS.Matcher = (function () {
       var bracketContent = bracketMatch[1].trim();
       if (isPropertyTag(bracketContent) || isSeasonMarker(bracketContent)) {
         var afterBracket = title.replace(/【[^】]+】/, '').trim();
-        return extractAnimeTitleFromCleaned(afterBracket);
+        result = extractAnimeTitleFromCleaned(afterBracket);
+        setCache('title:' + title, result);
+        return result;
       } else {
-        return cleanTitle(bracketContent);
+        result = cleanTitle(bracketContent);
+        setCache('title:' + title, result);
+        return result;
       }
     }
 
@@ -88,13 +121,19 @@ BS.Matcher = (function () {
     if (squareMatch) {
       var squareContent = squareMatch[1].trim();
       if (!isPropertyTag(squareContent) && !/^\d+$/.test(squareContent)) {
-        return cleanTitle(squareContent);
+        result = cleanTitle(squareContent);
+        setCache('title:' + title, result);
+        return result;
       }
       var afterSquare = title.replace(/\[[^\]]+\]/, '').trim();
-      return cleanTitle(afterSquare);
+      result = cleanTitle(afterSquare);
+      setCache('title:' + title, result);
+      return result;
     }
 
-    return cleanTitle(title);
+    result = cleanTitle(title);
+    setCache('title:' + title, result);
+    return result;
   }
 
   function extractAnimeTitleFromCleaned(title) {
