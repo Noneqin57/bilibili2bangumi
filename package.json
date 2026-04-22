@@ -1,0 +1,22 @@
+{
+  "name": "bilibili2bangumi",
+  "version": "0.4.3",
+  "description": "在 B 站观看 UGC 番剧视频时，手动搜索并同步到 Bangumi 收藏进度",
+  "scripts": {
+    "build": "node build.js",
+    "dev": "node build.js && echo 'Build complete. Reload extension to test.'",
+    "clean": "node -e \"require('fs').rmSync('dist', {recursive:true, force:true})\""
+  },
+  "keywords": [
+    "bilibili",
+    "bangumi",
+    "userscript",
+    "browser-extension"
+  ],
+  "author": "bilibili2bangumi",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/bilibili2bangumi/bilibili2bangumi"
+  }
+}
