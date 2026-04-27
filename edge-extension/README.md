@@ -90,4 +90,4 @@ edge-extension/
 ## 问题反馈
 
 如有问题，请访问 GitHub 仓库提交 Issue：
-https://github.com/bilibili2bangumi/bilibili2bangumi
+https://github.com/Noneqin57/bilibili2bangumi

@@ -4,7 +4,7 @@
   "version": "0.5.0",
   "description": "在 B 站观看 UGC 番剧视频时，手动搜索并同步到 Bangumi 收藏进度",
   "author": "bilibili2bangumi",
-  "homepage_url": "https://github.com/bilibili2bangumi/bilibili2bangumi",
+  "homepage_url": "https://github.com/Noneqin57/bilibili2bangumi",
   "icons": {
     "16": "icons/icon16.png",
     "48": "icons/icon48.png",

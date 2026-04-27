@@ -25,7 +25,7 @@ document.addEventListener('DOMContentLoaded', function() {
 
   // 打开 GitHub 按钮
   document.getElementById('open-github').addEventListener('click', function() {
-    chrome.tabs.create({ url: 'https://github.com/bilibili2bangumi/bilibili2bangumi' });
+    chrome.tabs.create({ url: 'https://github.com/Noneqin57/bilibili2bangumi' });
     window.close();
   });
 });

@@ -18,7 +18,7 @@ const CORE_FILES = [
 
 const USERSCRIPT_HEADER = `// ==UserScript==
 // @name         bilibili2bangumi
-// @namespace    https://github.com/bilibili2bangumi
+// @namespace    https://github.com/Noneqin57
 // @version      ${VERSION}
 // @description  在 B 站观看 UGC 番剧视频时，手动搜索并同步到 Bangumi 收藏进度
 // @author       bilibili2bangumi
@@ -30,8 +30,8 @@ const USERSCRIPT_HEADER = `// ==UserScript==
 // @grant        GM_addStyle
 // @connect      api.bgm.tv
 // @run-at       document-idle
-// @updateURL    https://raw.githubusercontent.com/bilibili2bangumi/bilibili2bangumi/main/bilibili2bangumi.user.js
-// @downloadURL  https://raw.githubusercontent.com/bilibili2bangumi/bilibili2bangumi/main/bilibili2bangumi.user.js
+// @updateURL    https://raw.githubusercontent.com/Noneqin57/bilibili2bangumi/main/bilibili2bangumi.user.js
+// @downloadURL  https://raw.githubusercontent.com/Noneqin57/bilibili2bangumi/main/bilibili2bangumi.user.js
 // @license      MIT
 // ==/UserScript==
 

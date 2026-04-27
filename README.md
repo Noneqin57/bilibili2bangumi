@@ -17,7 +17,7 @@
 ### 油猴脚本
 
 1. 安装 [Tampermonkey](https://www.tampermonkey.net/) 或 [Violentmonkey](https://violentmonkey.github.io/) 浏览器扩展
-2. [点击安装脚本](https://raw.githubusercontent.com/bilibili2bangumi/bilibili2bangumi/main/bilibili2bangumi.user.js)
+2. 在添加脚本中添加脚本bilibili2bangumi.user.js
 
 ### Edge 扩展
 
