@@ -36,3 +36,17 @@ jobs:
         with:
           name: bilibili2bangumi-edge-extension
           path: bilibili2bangumi-edge-v${{ steps.version.outputs.version }}.zip
+
+      - name: Trigger Greasy Fork sync
+        env:
+          GREASYFORK_WEBHOOK_URL: ${{ secrets.GREASYFORK_WEBHOOK_URL }}
+        run: |
+          if [ -n "$GREASYFORK_WEBHOOK_URL" ]; then
+            echo "Triggering Greasy Fork sync..."
+            curl -X POST "$GREASYFORK_WEBHOOK_URL" \
+              -H "Content-Type: application/json" \
+              -d '{"ref": "refs/heads/main", "repository": {"html_url": "https://github.com/Noneqin57/bilibili2bangumi"}}'
+            echo "Greasy Fork sync triggered."
+          else
+            echo "GREASYFORK_WEBHOOK_URL not set, skipping Greasy Fork sync."
+          fi
