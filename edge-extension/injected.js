@@ -447,7 +447,7 @@
   // ===== BangumiAPI 模块 =====
   BS.BangumiAPI = (function () {
     var BASE_URL = 'https://api.bgm.tv';
-    var USER_AGENT = 'BangumiSync/0.5.0 (Extension)';
+    var USER_AGENT = 'BangumiSync/0.5.1 (Extension)';
 
     var pendingRequests = {};
     var DEDUP_TTL = 500;
@@ -1419,7 +1419,7 @@
       if (typeof BS.VideoObserver !== 'undefined') {
         BS.VideoObserver.init();
       }
-      BS.Logger.info('v0.5.0 已加载');
+      BS.Logger.info('v0.5.1 已加载');
     }
 
     return {

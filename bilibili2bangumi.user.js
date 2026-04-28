@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         bilibili2bangumi
 // @namespace    https://github.com/Noneqin57
-// @version      0.5.0
+// @version      0.5.1
 // @description  在 B 站观看 UGC 番剧视频时，手动搜索并同步到 Bangumi 收藏进度
 // @author       bilibili2bangumi
 // @match        *://www.bilibili.com/video/*
@@ -443,7 +443,7 @@
   // ===== BangumiAPI 模块 =====
   BS.BangumiAPI = (function () {
     var BASE_URL = 'https://api.bgm.tv';
-    var USER_AGENT = 'BangumiSync/0.5.0 (UserScript)';
+    var USER_AGENT = 'BangumiSync/0.5.1 (UserScript)';
 
     var pendingRequests = {};
     var DEDUP_TTL = 500;
@@ -1415,7 +1415,7 @@
       if (typeof BS.VideoObserver !== 'undefined') {
         BS.VideoObserver.init();
       }
-      BS.Logger.info('v0.5.0 已加载');
+      BS.Logger.info('v0.5.1 已加载');
     }
 
     return {
