@@ -1,10 +1,11 @@
 // ==UserScript==
 // @name         bilibili2bangumi
 // @namespace    https://github.com/Noneqin57
-// @version      0.5.1
+// @version      0.7.0
 // @description  在 B 站观看 UGC 番剧视频时，手动搜索并同步到 Bangumi 收藏进度
 // @author       bilibili2bangumi
 // @match        *://www.bilibili.com/video/*
+// @match        *://www.bilibili.com/bangumi/play/*
 // @grant        GM_setValue
 // @grant        GM_getValue
 // @grant        GM_xmlhttpRequest
@@ -443,7 +444,7 @@
   // ===== BangumiAPI 模块 =====
   BS.BangumiAPI = (function () {
     var BASE_URL = 'https://api.bgm.tv';
-    var USER_AGENT = 'BangumiSync/0.5.1 (UserScript)';
+    var USER_AGENT = 'BangumiSync/0.7.0 (UserScript)';
 
     var pendingRequests = {};
     var DEDUP_TTL = 500;
@@ -570,7 +571,9 @@
       var query = '?keyword=' + encodeURIComponent(keyword);
       if (options.type) query += '&type=' + options.type;
       if (options.limit) query += '&limit=' + options.limit;
-      return request('POST', '/v0/search/subjects' + query, { keyword: keyword, filter: { type: [options.type || 2] } }, false);
+      var searchType = options.type || [2, 6];
+      if (!Array.isArray(searchType)) searchType = [searchType];
+      return request('POST', '/v0/search/subjects' + query, { keyword: keyword, filter: { type: searchType } }, false);
     }
 
     function createOrUpdateCollection(subjectId, payload) {
@@ -839,6 +842,28 @@
 
       ball.addEventListener('click', function(e) {
         e.stopPropagation();
+
+        if (typeof BS.BangumiWatcher !== 'undefined' && BS.BangumiWatcher.isBangumiPage()) {
+          var autoSyncState = (typeof BS.AutoSync !== 'undefined') ? BS.AutoSync.getState() : null;
+          if (autoSyncState) {
+            if (autoSyncState.searching) {
+              showToast('搜索中，请稍候', 'info');
+              return;
+            }
+            if (autoSyncState.matched && autoSyncState.candidates.length > 0) {
+              var info = autoSyncState.videoInfo || BS.BangumiWatcher.extractBangumiInfo();
+              showSearchResults(autoSyncState.candidates, info);
+              return;
+            }
+            if (autoSyncState.searched && !autoSyncState.matched) {
+              manualSearch();
+              return;
+            }
+          }
+          showBangumiMenu();
+          return;
+        }
+
         var autoSyncState = (typeof BS.AutoSync !== 'undefined') ? BS.AutoSync.getState() : null;
         var mode = BS.Config.getAutoSyncMode();
 
@@ -924,7 +949,69 @@
       }, 100);
     }
 
+    function showBangumiMenu() {
+      var existing = document.getElementById('bgm-floating-menu');
+      if (existing) {
+        existing.remove();
+        return;
+      }
+
+      var menu = document.createElement('div');
+      menu.id = 'bgm-floating-menu';
+
+      var items = [
+        { icon: '🔍', text: '搜索并同步', action: searchAndSync },
+        { icon: '✏️', text: '手动搜索', action: manualSearch },
+        { icon: '⚙️', text: '设置', action: showSettingsPanel }
+      ];
+
+      items.forEach(function(item) {
+        var div = document.createElement('div');
+        div.className = 'bgm-menu-item';
+        div.innerHTML = item.icon + ' ' + item.text;
+        div.addEventListener('click', function(e) {
+          e.stopPropagation();
+          menu.remove();
+          item.action();
+        });
+        menu.appendChild(div);
+      });
+
+      document.body.appendChild(menu);
+
+      setTimeout(function() {
+        document.addEventListener('click', function closeMenu() {
+          menu.remove();
+          document.removeEventListener('click', closeMenu);
+        });
+      }, 100);
+    }
+
     function searchAndSync() {
+      var isBangumi = typeof BS.BangumiWatcher !== 'undefined' && BS.BangumiWatcher.isBangumiPage();
+
+      if (isBangumi) {
+        var bgmInfo = BS.BangumiWatcher.extractBangumiInfo();
+        if (!bgmInfo.title) {
+          showToast('无法获取番剧信息', 'error');
+          return;
+        }
+        showToast('正在搜索: ' + bgmInfo.title, 'info');
+        BS.BangumiAPI.searchSubjects(bgmInfo.title, { limit: 10 })
+          .then(function(res) {
+            var candidates = res && res.data ? res.data : [];
+            if (!candidates.length) {
+              showToast('未找到匹配条目', 'error');
+              return;
+            }
+            showSearchResults(candidates, { title: bgmInfo.title, ep: bgmInfo.ep, episodeTitle: bgmInfo.episodeTitle, url: bgmInfo.url, pageType: 'bangumi' });
+          })
+          .catch(function(err) {
+            showToast('搜索失败: ' + err.message, 'error');
+          });
+        return;
+      }
+
       var info = BS.BiliWatcher.extractVideoInfo();
       if (!info.upName) {
         showToast('无法识别 UP 信息', 'error');
@@ -940,7 +1027,7 @@
       var searchTitle = BS.Matcher.extractAnimeTitle(info.title);
       showToast('正在搜索: ' + searchTitle, 'info');
 
-      BS.BangumiAPI.searchSubjects(searchTitle, { limit: 10, type: 2 })
+      BS.BangumiAPI.searchSubjects(searchTitle, { limit: 10 })
         .then(function(res) {
           var candidates = res && res.data ? res.data : [];
           if (!candidates.length) {
@@ -1059,8 +1146,13 @@
     function showEpisodeInput(subject, videoInfo) {
       closeOverlay();
 
-      var epResult = BS.Matcher.extractEpisode(videoInfo.title);
-      var detectedEp = epResult ? epResult.ep : null;
+      var detectedEp = null;
+      if (videoInfo && videoInfo.pageType === 'bangumi') {
+        detectedEp = BS.BangumiWatcher.extractEpisode();
+      } else {
+        var epResult = BS.Matcher.extractEpisode(videoInfo.title);
+        detectedEp = epResult ? epResult.ep : null;
+      }
 
       var panel = document.createElement('div');
       panel.id = 'bgm-sync-panel';
@@ -1088,8 +1180,10 @@
 
         var mode = BS.Config.getAutoSyncMode();
         if (mode === 'assist' || mode === 'auto') {
-          var cleanTitle = BS.Matcher.extractAnimeTitle(videoInfo.title);
-          BS.Config.confirmSubject(videoInfo.upName, cleanTitle, subject.id);
+          if (!videoInfo || videoInfo.pageType !== 'bangumi') {
+            var cleanTitle = BS.Matcher.extractAnimeTitle(videoInfo.title);
+            BS.Config.confirmSubject(videoInfo.upName, cleanTitle, subject.id);
+          }
         }
 
         BS.Orchestrator.sync(subject.id, ep, { fillPrevious: fillPrevious });
@@ -1145,7 +1239,7 @@
         var info = BS.BiliWatcher.extractVideoInfo();
         showToast('正在搜索: ' + keyword, 'info');
 
-        BS.BangumiAPI.searchSubjects(keyword, { limit: 10, type: 2 })
+        BS.BangumiAPI.searchSubjects(keyword, { limit: 10 })
           .then(function(res) {
             var candidates = res && res.data ? res.data : [];
             if (!candidates.length) {
@@ -1415,7 +1509,7 @@
       if (typeof BS.VideoObserver !== 'undefined') {
         BS.VideoObserver.init();
       }
-      BS.Logger.info('v0.5.1 已加载');
+      BS.Logger.info('v0.7.0 已加载');
     }
 
     return {
@@ -1424,6 +1518,111 @@
       extractUpName: extractUpName,
       extractUid: extractUid,
       extractVideoInfo: extractVideoInfo
+    };
+  })();
+
+
+  // ===== BangumiWatcher 模块 =====
+  // 从 B 站番剧页面提取番剧信息（无 UP 概念，使用 __INITIAL_STATE__ 结构化数据）
+
+  BS.BangumiWatcher = (function () {
+    function isBangumiPage() {
+      return /^\/bangumi\/play\//.test(location.pathname);
+    }
+
+    function getInitialState() {
+      try {
+        if (window.__INITIAL_STATE__) {
+          return window.__INITIAL_STATE__;
+        }
+      } catch (e) {
+        /* 忽略 */
+      }
+      return null;
+    }
+
+    function extractTitle() {
+      var state = getInitialState();
+
+      if (state) {
+        if (state.mediaInfo) {
+          var t = state.mediaInfo.title || state.mediaInfo.season_title || '';
+          if (t) return t.trim();
+        }
+      }
+
+      var og = document.querySelector('meta[property="og:title"]');
+      if (og) {
+        var ogTitle = (og.getAttribute('content') || '').trim();
+        if (ogTitle) return ogTitle;
+      }
+
+      var docTitle = document.title || '';
+      docTitle = docTitle.replace(/[_-]番剧.*$/, '').replace(/[_-]哔哩哔哩.*$/, '').replace(/_bilibili$/i, '').trim();
+      return docTitle;
+    }
+
+    function extractEpisode() {
+      var state = getInitialState();
+
+      if (state) {
+        if (state.epInfo) {
+          var raw = state.epInfo.index !== undefined ? state.epInfo.index
+            : state.epInfo.ep_index !== undefined ? state.epInfo.ep_index
+            : state.epInfo.ep ? state.epInfo.ep
+            : null;
+
+          if (raw !== null && raw !== undefined) {
+            var ep = typeof raw === 'string' ? parseInt(raw, 10) : raw;
+            if (!isNaN(ep) && ep > 0) return ep;
+          }
+
+          var title = state.epInfo.title || state.epInfo.long_title || '';
+          var m = title.match(/第\s*(\d+)/);
+          if (m) {
+            var fromTitle = parseInt(m[1], 10);
+            if (!isNaN(fromTitle) && fromTitle > 0) return fromTitle;
+          }
+        }
+      }
+
+      return null;
+    }
+
+    function extractEpisodeTitle() {
+      var state = getInitialState();
+
+      if (state && state.epInfo) {
+        var t = state.epInfo.long_title || state.epInfo.title || '';
+        if (t) return t.trim();
+      }
+
+      return '';
+    }
+
+    function extractBangumiInfo() {
+      return {
+        title: extractTitle(),
+        ep: extractEpisode(),
+        episodeTitle: extractEpisodeTitle(),
+        url: location.href
+      };
+    }
+
+    function init() {
+      BS.UI.createFloatingBall();
+      if (typeof BS.VideoObserver !== 'undefined') {
+        BS.VideoObserver.init();
+      }
+      BS.Logger.info('v0.7.0 已加载（番剧页面）');
+    }
+
+    return {
+      isBangumiPage: isBangumiPage,
+      extractBangumiInfo: extractBangumiInfo,
+      extractEpisode: extractEpisode,
+      extractTitle: extractTitle,
+      init: init
     };
   })();
 
@@ -1813,6 +2012,19 @@
         return false;
       }
 
+      if (typeof BS.BangumiWatcher !== 'undefined' && BS.BangumiWatcher.isBangumiPage()) {
+        var bgmInfo = BS.BangumiWatcher.extractBangumiInfo();
+        if (!bgmInfo.title) return false;
+        state.videoInfo = {
+          title: bgmInfo.title,
+          episodeTitle: bgmInfo.episodeTitle,
+          ep: bgmInfo.ep,
+          url: bgmInfo.url,
+          pageType: 'bangumi'
+        };
+        return true;
+      }
+
       var info = BS.BiliWatcher.extractVideoInfo();
       if (!info.upName) return false;
 
@@ -1845,7 +2057,7 @@
 
       var searchTitle = BS.Matcher.extractAnimeTitle(state.videoInfo.title);
 
-      var searchPromise = BS.BangumiAPI.searchSubjects(searchTitle, { limit: 10, type: 2 });
+      var searchPromise = BS.BangumiAPI.searchSubjects(searchTitle, { limit: 10 });
       currentSearchPromise = searchPromise;
 
       return searchPromise
@@ -1935,6 +2147,19 @@
       }
 
       var info = state.videoInfo;
+
+      if (info.pageType === 'bangumi') {
+        var ep = BS.BangumiWatcher.extractEpisode() || 1;
+        if (BS.Config.isRecentlySynced(best.subject.id, ep)) {
+          if (typeof BS.UI !== 'undefined') {
+            BS.UI.showToast('24 小时内已同步过该集', 'info');
+          }
+          return;
+        }
+        BS.Orchestrator.sync(best.subject.id, ep);
+        return;
+      }
+
       var epResult = BS.Matcher.extractEpisode(info.title);
       var ep = epResult ? epResult.ep : 1;
       var cleanTitle = BS.Matcher.extractAnimeTitle(info.title);
@@ -1978,6 +2203,10 @@
 
 
   // ===== 初始化 =====
-  BS.BiliWatcher.init();
+  if (window.location.pathname.indexOf('/bangumi/play/') === 0) {
+    BS.BangumiWatcher.init();
+  } else {
+    BS.BiliWatcher.init();
+  }
 
 })();

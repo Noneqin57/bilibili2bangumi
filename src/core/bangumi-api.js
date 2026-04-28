@@ -128,7 +128,9 @@ BS.BangumiAPI = (function () {
     var query = '?keyword=' + encodeURIComponent(keyword);
     if (options.type) query += '&type=' + options.type;
     if (options.limit) query += '&limit=' + options.limit;
-    return request('POST', '/v0/search/subjects' + query, { keyword: keyword, filter: { type: [options.type || 2] } }, false);
+    var searchType = options.type || [2, 6];
+    if (!Array.isArray(searchType)) searchType = [searchType];
+    return request('POST', '/v0/search/subjects' + query, { keyword: keyword, filter: { type: searchType } }, false);
   }
 
   function createOrUpdateCollection(subjectId, payload) {

@@ -1,7 +1,7 @@
 const fs = require('fs');
 const path = require('path');
 
-const VERSION = '0.5.1';
+const VERSION = '0.7.0';
 
 const CORE_FILES = [
   'src/platforms/PLATFORM-adapter.js',
@@ -11,6 +11,7 @@ const CORE_FILES = [
   'src/core/bangumi-api.js',
   'src/core/ui.js',
   'src/core/bilibili-watcher.js',
+  'src/core/bangumi-watcher.js',
   'src/core/orchestrator.js',
   'src/core/video-observer.js',
   'src/core/auto-sync.js'
@@ -23,6 +24,7 @@ const USERSCRIPT_HEADER = `// ==UserScript==
 // @description  在 B 站观看 UGC 番剧视频时，手动搜索并同步到 Bangumi 收藏进度
 // @author       bilibili2bangumi
 // @match        *://www.bilibili.com/video/*
+// @match        *://www.bilibili.com/bangumi/play/*
 // @grant        GM_setValue
 // @grant        GM_getValue
 // @grant        GM_xmlhttpRequest
@@ -96,7 +98,11 @@ function buildUserscript() {
   });
 
   output += '  // ===== 初始化 =====\n';
-  output += '  BS.BiliWatcher.init();\n\n';
+  output += "  if (window.location.pathname.indexOf('/bangumi/play/') === 0) {\n";
+  output += '    BS.BangumiWatcher.init();\n';
+  output += '  } else {\n';
+  output += '    BS.BiliWatcher.init();\n';
+  output += '  }\n\n';
   output += '})();\n';
 
   fs.writeFileSync('bilibili2bangumi.user.js', output);
@@ -129,7 +135,11 @@ function buildExtension() {
   });
 
   output += '  // ===== 初始化 =====\n';
-  output += '  BS.BiliWatcher.init();\n\n';
+  output += "  if (window.location.pathname.indexOf('/bangumi/play/') === 0) {\n";
+  output += '    BS.BangumiWatcher.init();\n';
+  output += '  } else {\n';
+  output += '    BS.BiliWatcher.init();\n';
+  output += '  }\n\n';
   output += '})();\n';
 
   fs.writeFileSync('edge-extension/injected.js', output);

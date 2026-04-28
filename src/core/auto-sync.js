@@ -140,6 +140,19 @@ BS.AutoSync = (function () {
       return false;
     }
 
+    if (typeof BS.BangumiWatcher !== 'undefined' && BS.BangumiWatcher.isBangumiPage()) {
+      var bgmInfo = BS.BangumiWatcher.extractBangumiInfo();
+      if (!bgmInfo.title) return false;
+      state.videoInfo = {
+        title: bgmInfo.title,
+        episodeTitle: bgmInfo.episodeTitle,
+        ep: bgmInfo.ep,
+        url: bgmInfo.url,
+        pageType: 'bangumi'
+      };
+      return true;
+    }
+
     var info = BS.BiliWatcher.extractVideoInfo();
     if (!info.upName) return false;
 
@@ -172,7 +185,7 @@ BS.AutoSync = (function () {
 
     var searchTitle = BS.Matcher.extractAnimeTitle(state.videoInfo.title);
 
-    var searchPromise = BS.BangumiAPI.searchSubjects(searchTitle, { limit: 10, type: 2 });
+    var searchPromise = BS.BangumiAPI.searchSubjects(searchTitle, { limit: 10 });
     currentSearchPromise = searchPromise;
 
     return searchPromise
@@ -262,6 +275,19 @@ BS.AutoSync = (function () {
     }
 
     var info = state.videoInfo;
+
+    if (info.pageType === 'bangumi') {
+      var ep = BS.BangumiWatcher.extractEpisode() || 1;
+      if (BS.Config.isRecentlySynced(best.subject.id, ep)) {
+        if (typeof BS.UI !== 'undefined') {
+          BS.UI.showToast('24 小时内已同步过该集', 'info');
+        }
+        return;
+      }
+      BS.Orchestrator.sync(best.subject.id, ep);
+      return;
+    }
+
     var epResult = BS.Matcher.extractEpisode(info.title);
     var ep = epResult ? epResult.ep : 1;
     var cleanTitle = BS.Matcher.extractAnimeTitle(info.title);
