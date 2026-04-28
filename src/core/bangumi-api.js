@@ -142,8 +142,12 @@ BS.BangumiAPI = (function () {
     }, true);
   }
 
-  function getEpisodes(subjectId) {
-    return request('GET', '/v0/episodes?subject_id=' + subjectId, null, false);
+  function getEpisodes(subjectId, options) {
+    options = options || {};
+    var query = '?subject_id=' + subjectId;
+    if (options.limit) query += '&limit=' + options.limit;
+    if (options.offset) query += '&offset=' + options.offset;
+    return request('GET', '/v0/episodes' + query, null, false);
   }
 
   return {

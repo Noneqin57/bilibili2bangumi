@@ -2,3 +2,7 @@
 .trae
 /docs
 /CHANGELOG
+.claude
+dist
+node_modules
+package-lock.json

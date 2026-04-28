@@ -438,6 +438,12 @@ BS.UI = (function () {
       '<span style="font-size:14px">话</span>',
       '</div>',
       '</div>',
+      '<div style="margin-bottom:16px;padding:10px 12px;background:#f9f9f9;border-radius:8px">',
+      '<label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-size:13px;color:#666">',
+      '<input id="bgm-fill-previous" type="checkbox" style="width:16px;height:16px;cursor:pointer">',
+      '<span>补全前面集数（将第 1~N 话一并标记为看过）</span>',
+      '</label>',
+      '</div>',
       '<div style="display:flex;justify-content:flex-end;gap:10px">',
       '<button id="bgm-cancel" style="padding:8px 16px;border:1px solid #ddd;border-radius:6px;background:#fff;cursor:pointer">取消</button>',
       '<button id="bgm-confirm" style="padding:8px 16px;border:0;border-radius:6px;background:#fb7299;color:#fff;cursor:pointer">确认同步</button>',
@@ -473,6 +479,7 @@ BS.UI = (function () {
         showToast('请输入有效的集数', 'error');
         return;
       }
+      var fillPrevious = document.getElementById('bgm-fill-previous').checked;
       closeOverlay();
 
       var mode = BS.Config.getAutoSyncMode();
@@ -481,7 +488,7 @@ BS.UI = (function () {
         BS.Config.confirmSubject(videoInfo.upName, cleanTitle, subject.id);
       }
 
-      BS.Orchestrator.sync(subject.id, ep);
+      BS.Orchestrator.sync(subject.id, ep, { fillPrevious: fillPrevious });
     });
 
     document.getElementById('bgm-ep-input').addEventListener('keypress', function(e) {

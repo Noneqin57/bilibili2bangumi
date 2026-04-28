@@ -588,8 +588,12 @@
       }, true);
     }
 
-    function getEpisodes(subjectId) {
-      return request('GET', '/v0/episodes?subject_id=' + subjectId, null, false);
+    function getEpisodes(subjectId, options) {
+      options = options || {};
+      var query = '?subject_id=' + subjectId;
+      if (options.limit) query += '&limit=' + options.limit;
+      if (options.offset) query += '&offset=' + options.offset;
+      return request('GET', '/v0/episodes' + query, null, false);
     }
 
     return {
@@ -1042,6 +1046,12 @@
         '<span style="font-size:14px">话</span>',
         '</div>',
         '</div>',
+        '<div style="margin-bottom:16px;padding:10px 12px;background:#f9f9f9;border-radius:8px">',
+        '<label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-size:13px;color:#666">',
+        '<input id="bgm-fill-previous" type="checkbox" style="width:16px;height:16px;cursor:pointer">',
+        '<span>补全前面集数（将第 1~N 话一并标记为看过）</span>',
+        '</label>',
+        '</div>',
         '<div style="display:flex;justify-content:flex-end;gap:10px">',
         '<button id="bgm-cancel" style="padding:8px 16px;border:1px solid #ddd;border-radius:6px;background:#fff;cursor:pointer">取消</button>',
         '<button id="bgm-confirm" style="padding:8px 16px;border:0;border-radius:6px;background:#fb7299;color:#fff;cursor:pointer">确认同步</button>',
@@ -1077,6 +1087,7 @@
           showToast('请输入有效的集数', 'error');
           return;
         }
+        var fillPrevious = document.getElementById('bgm-fill-previous').checked;
         closeOverlay();
 
         var mode = BS.Config.getAutoSyncMode();
@@ -1085,7 +1096,7 @@
           BS.Config.confirmSubject(videoInfo.upName, cleanTitle, subject.id);
         }
 
-        BS.Orchestrator.sync(subject.id, ep);
+        BS.Orchestrator.sync(subject.id, ep, { fillPrevious: fillPrevious });
       });
 
       document.getElementById('bgm-ep-input').addEventListener('keypress', function(e) {
@@ -1423,14 +1434,27 @@
 
   // ===== Orchestrator 模块 =====
   BS.Orchestrator = (function () {
-    function sync(subjectId, ep) {
+    function findEpisodeIds(episodes, targetEp) {
+      var ids = [];
+      for (var i = 0; i < episodes.length; i++) {
+        if (episodes[i].ep === targetEp || episodes[i].sort === targetEp) {
+          ids.push(episodes[i].id);
+        }
+      }
+      return ids;
+    }
+
+    function sync(subjectId, ep, options) {
+      options = options || {};
       var token = BS.Config.getAccessToken();
       if (!token) {
         BS.UI.showToast('未配置 Bangumi Token', 'error', 5000);
         return;
       }
 
-      if (BS.Config.isRecentlySynced(subjectId, ep)) {
+      var fillPrevious = options.fillPrevious === true;
+
+      if (!fillPrevious && BS.Config.isRecentlySynced(subjectId, ep)) {
         BS.UI.showToast('24 小时内已同步过该集', 'info');
         return;
       }
@@ -1439,10 +1463,32 @@
 
       BS.BangumiAPI.createOrUpdateCollection(subjectId, { type: 3 })
         .then(function() {
-          return BS.BangumiAPI.getEpisodes(subjectId);
+          // 补全模式下拉取足够多的剧集
+          var epOptions = fillPrevious ? { limit: Math.max(200, ep + 50) } : undefined;
+          return BS.BangumiAPI.getEpisodes(subjectId, epOptions);
         })
         .then(function(epRes) {
           var episodes = epRes && epRes.data ? epRes.data : [];
+
+          if (fillPrevious) {
+            // 补全模式：收集第 1 ~ ep 话的所有剧集 ID
+            var allIds = [];
+            for (var epNum = 1; epNum <= ep; epNum++) {
+              var ids = findEpisodeIds(episodes, epNum);
+              allIds = allIds.concat(ids);
+            }
+
+            if (allIds.length === 0) {
+              BS.UI.showToast('未找到第 1~' + ep + ' 话，请检查集数', 'error');
+              return;
+            }
+
+            return BS.BangumiAPI.markSubjectEpisodesWatched(subjectId, allIds).then(function() {
+              return { filled: ep };
+            });
+          }
+
+          // 单集模式
           var targetEp = null;
           for (var i = 0; i < episodes.length; i++) {
             if (episodes[i].ep === ep || episodes[i].sort === ep) {
@@ -1458,9 +1504,17 @@
 
           return BS.BangumiAPI.markSubjectEpisodesWatched(subjectId, [targetEp.id]);
         })
-        .then(function() {
-          BS.Config.addSyncRecord(subjectId, ep);
-          BS.UI.showToast('同步成功！', 'success');
+        .then(function(result) {
+          if (result && result.filled) {
+            // 补全模式：记录所有集数
+            for (var epNum = 1; epNum <= result.filled; epNum++) {
+              BS.Config.addSyncRecord(subjectId, epNum);
+            }
+            BS.UI.showToast('补全同步成功！已标记第 1~' + result.filled + ' 话', 'success');
+          } else {
+            BS.Config.addSyncRecord(subjectId, ep);
+            BS.UI.showToast('同步成功！', 'success');
+          }
         })
         .catch(function(err) {
           BS.UI.showToast('同步失败: ' + err.message, 'error', 5000);
