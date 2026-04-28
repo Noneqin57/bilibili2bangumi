@@ -8,7 +8,6 @@
 // @grant        GM_setValue
 // @grant        GM_getValue
 // @grant        GM_xmlhttpRequest
-// @grant        GM_registerMenuCommand
 // @grant        GM_addStyle
 // @connect      api.bgm.tv
 // @run-at       document-idle
@@ -286,6 +285,9 @@
 
     var SEASON_MARKERS = /^(\d{1,2})\s*月\s*(新番)?$/i;
 
+    // 常见视频分辨率，避免被误识别为集数
+    var COMMON_RESOLUTIONS = { 144:1, 240:1, 360:1, 480:1, 540:1, 720:1, 1080:1, 1440:1, 2160:1, 4320:1 };
+
     var CACHE_SIZE = 20;
     var cache = {};
     var cacheKeys = [];
@@ -310,8 +312,13 @@
       for (var i = 0; i < EP_PATTERNS.length; i++) {
         var m = title.match(EP_PATTERNS[i].regex);
         if (m) {
+          var ep = parseInt(m[1], 10);
+          // 跳过常见分辨率数字，避免 [1080]、[720] 等被误识别为集数
+          if (COMMON_RESOLUTIONS.hasOwnProperty(ep)) {
+            continue;
+          }
           var result = {
-            ep: parseInt(m[1], 10),
+            ep: ep,
             pattern: EP_PATTERNS[i].name
           };
           setCache('ep:' + title, result);
@@ -506,7 +513,7 @@
                   if ((res.status >= 500 || res.status === 0) && retryAttempt < MAX_RETRIES) {
                     retryAttempt++;
                     var delay = RETRY_DELAY_BASE * Math.pow(2, retryAttempt - 1);
-                    console.log('[BangumiSync] 请求失败，' + delay + 'ms 后第 ' + retryAttempt + ' 次重试');
+                    BS.Logger.warn('请求失败，' + delay + 'ms 后第 ' + retryAttempt + ' 次重试');
                     setTimeout(doRequest, delay);
                   } else {
                     try {
@@ -522,7 +529,7 @@
                 if (retryAttempt < MAX_RETRIES) {
                   retryAttempt++;
                   var delay = RETRY_DELAY_BASE * Math.pow(2, retryAttempt - 1);
-                  console.log('[BangumiSync] 网络错误，' + delay + 'ms 后第 ' + retryAttempt + ' 次重试');
+                  BS.Logger.warn('网络错误，' + delay + 'ms 后第 ' + retryAttempt + ' 次重试');
                   setTimeout(doRequest, delay);
                 } else {
                   reject(new Error('网络请求失败，已重试' + MAX_RETRIES + '次'));
@@ -532,7 +539,7 @@
                 if (retryAttempt < MAX_RETRIES) {
                   retryAttempt++;
                   var delay = RETRY_DELAY_BASE * Math.pow(2, retryAttempt - 1);
-                  console.log('[BangumiSync] 请求超时，' + delay + 'ms 后第 ' + retryAttempt + ' 次重试');
+                  BS.Logger.warn('请求超时，' + delay + 'ms 后第 ' + retryAttempt + ' 次重试');
                   setTimeout(doRequest, delay);
                 } else {
                   reject(new Error('请求超时，请检查网络连接，已重试' + MAX_RETRIES + '次'));
@@ -593,9 +600,16 @@
 
   // ===== UI 模块 =====
   BS.UI = (function () {
-    var ballState = {
-      hidden: false
-    };
+    // HTML 转义，防止 XSS
+    function escHTML(str) {
+      if (!str && str !== 0) return '';
+      return String(str)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#39;');
+    }
 
     // 样式
     var STYLES = [
@@ -745,19 +759,19 @@
 
       function handleFullscreenChange() {
         if (!BS.Config.getHideOnWide()) {
-          console.log('[BangumiSync] 宽屏隐藏功能已关闭');
+          BS.Logger.debug('宽屏隐藏功能已关闭');
           return;
         }
 
         var isWide = isBiliPlayerWide();
-        console.log('[BangumiSync] 宽屏检测:', isWide);
+        BS.Logger.debug('宽屏检测: ' + isWide);
 
         if (isWide) {
           container.classList.add('bgm-fullscreen-hidden');
-          console.log('[BangumiSync] 已隐藏悬浮球');
+          BS.Logger.debug('已隐藏悬浮球');
         } else {
           container.classList.remove('bgm-fullscreen-hidden');
-          console.log('[BangumiSync] 已显示悬浮球');
+          BS.Logger.debug('已显示悬浮球');
         }
       }
 
@@ -775,7 +789,7 @@
               className.indexOf('wide') !== -1 ||
               title.indexOf('全屏') !== -1 ||
               title.indexOf('宽屏') !== -1) {
-            console.log('[BangumiSync] 检测到全屏/宽屏按钮点击');
+            BS.Logger.debug('检测到全屏/宽屏按钮点击');
             setTimeout(handleFullscreenChange, 300);
             setTimeout(handleFullscreenChange, 600);
           }
@@ -787,13 +801,13 @@
         var observer = new MutationObserver(function(mutations) {
           mutations.forEach(function(mutation) {
             if (mutation.type === 'attributes' && mutation.attributeName === 'class') {
-              console.log('[BangumiSync] 播放器类名变化:', player.className);
+              BS.Logger.debug('播放器类名变化: ' + player.className);
               handleFullscreenChange();
             }
           });
         });
         observer.observe(player, { attributes: true, attributeFilter: ['class'] });
-        console.log('[BangumiSync] 已监听播放器类名变化');
+        BS.Logger.debug('已监听播放器类名变化');
       }
 
       setTimeout(handleFullscreenChange, 500);
@@ -943,10 +957,10 @@
         var score = item.score ? '评分: ' + item.score : '';
         var date = item.date || '';
         return [
-          '<div class="bgm-result-item" data-index="' + idx + '" data-id="' + item.id + '" style="padding:12px 16px;border-bottom:1px solid #eee;cursor:pointer;transition:background 0.2s">',
-          '<div style="font-weight:600;font-size:15px">' + name + '</div>',
-          origName ? '<div style="font-size:12px;color:#666;margin-top:2px">' + origName + '</div>' : '',
-          '<div style="font-size:12px;color:#999;margin-top:4px">' + score + (score && date ? ' | ' : '') + date + '</div>',
+          '<div class="bgm-result-item" data-index="' + idx + '" data-id="' + escHTML(String(item.id)) + '" style="padding:12px 16px;border-bottom:1px solid #eee;cursor:pointer;transition:background 0.2s">',
+          '<div style="font-weight:600;font-size:15px">' + escHTML(name) + '</div>',
+          origName ? '<div style="font-size:12px;color:#666;margin-top:2px">' + escHTML(origName) + '</div>' : '',
+          '<div style="font-size:12px;color:#999;margin-top:4px">' + escHTML(score) + (score && date ? ' | ' : '') + escHTML(date) + '</div>',
           '</div>'
         ].join('');
       }).join('');
@@ -1010,11 +1024,11 @@
         '<div style="padding:20px">',
         '<div style="margin-bottom:16px">',
         '<div style="font-size:13px;color:#666;margin-bottom:4px">番剧</div>',
-        '<div style="font-weight:600">' + subjectName + '</div>',
+        '<div style="font-weight:600">' + escHTML(subjectName) + '</div>',
         '</div>',
         '<div style="margin-bottom:16px">',
         '<div style="font-size:13px;color:#666;margin-bottom:4px">视频标题</div>',
-        '<div style="font-size:13px;color:#333;background:#f5f5f5;padding:8px;border-radius:4px">' + videoInfo.title + '</div>',
+        '<div style="font-size:13px;color:#333;background:#f5f5f5;padding:8px;border-radius:4px">' + escHTML(videoInfo.title) + '</div>',
         '</div>',
         '<div style="margin-bottom:20px">',
         '<div style="font-size:13px;color:#666;margin-bottom:4px">' + detectedText + '</div>',
@@ -1067,7 +1081,7 @@
           BS.Config.confirmSubject(videoInfo.upName, cleanTitle, subject.id);
         }
 
-        BS.Orchestrator.sync(subject.id, ep, videoInfo);
+        BS.Orchestrator.sync(subject.id, ep);
       });
 
       document.getElementById('bgm-ep-input').addEventListener('keypress', function(e) {
@@ -1169,8 +1183,8 @@
         return [
           '<div style="display:flex;justify-content:space-between;align-items:center;padding:8px 0;border-bottom:1px solid #eee">',
           '<div>',
-          '<div style="font-weight:500">' + (up.upName || '未命名') + '</div>',
-          up.uid ? '<div style="font-size:12px;color:#999">UID: ' + up.uid + '</div>' : '',
+          '<div style="font-weight:500">' + escHTML(up.upName || '未命名') + '</div>',
+          up.uid ? '<div style="font-size:12px;color:#999">UID: ' + escHTML(String(up.uid)) + '</div>' : '',
           '</div>',
           '<button class="bgm-remove-up" data-index="' + idx + '" style="padding:4px 10px;border:1px solid #ff4d4f;border-radius:4px;color:#ff4d4f;background:#fff;cursor:pointer;font-size:12px">删除</button>',
           '</div>'
@@ -1185,7 +1199,7 @@
         '<div style="padding:20px;max-height:60vh;overflow:auto">',
         '<div style="margin-bottom:20px">',
         '<div style="font-size:13px;color:#666;margin-bottom:8px">Access Token</div>',
-        '<input id="bgm-token-input" type="text" value="' + configs.token + '" placeholder="在 next.bgm.tv/demo/access-token 生成" style="width:100%;padding:10px;border:1px solid #ddd;border-radius:6px;font-size:14px;box-sizing:border-box">',
+        '<input id="bgm-token-input" type="text" value="' + escHTML(configs.token) + '" placeholder="在 next.bgm.tv/demo/access-token 生成" style="width:100%;padding:10px;border:1px solid #ddd;border-radius:6px;font-size:14px;box-sizing:border-box">',
         '<div style="font-size:12px;color:#999;margin-top:4px">Token 地址: <a href="https://next.bgm.tv/demo/access-token" target="_blank" style="color:#fb7299">next.bgm.tv/demo/access-token</a></div>',
         '</div>',
         '<div style="margin-bottom:20px">',
@@ -1390,7 +1404,7 @@
       if (typeof BS.VideoObserver !== 'undefined') {
         BS.VideoObserver.init();
       }
-      console.log('[BangumiSync] v0.5.0 已加载');
+      BS.Logger.info('v0.5.0 已加载');
     }
 
     return {
@@ -1405,7 +1419,7 @@
 
   // ===== Orchestrator 模块 =====
   BS.Orchestrator = (function () {
-    function sync(subjectId, ep, videoInfo) {
+    function sync(subjectId, ep) {
       var token = BS.Config.getAccessToken();
       if (!token) {
         BS.UI.showToast('未配置 Bangumi Token', 'error', 5000);
@@ -1503,7 +1517,7 @@
         if (hasTriggered) return;
         hasTriggered = true;
 
-        console.log('[BangumiSync] 视频开始播放，触发自动同步检测');
+        BS.Logger.debug('视频开始播放，触发自动同步检测');
 
         if (typeof BS.AutoSync !== 'undefined') {
           BS.AutoSync.handlePlayEvent();
@@ -1692,14 +1706,14 @@
         // 标记为已取消，实际请求会继续但结果会被忽略
         currentSearchPromise = null;
       }
-      console.log('[BangumiSync] 已取消待处理的搜索');
+      BS.Logger.debug('已取消待处理的搜索');
     }
 
     function debouncedSearch() {
       // 取消之前的防抖定时器
       if (debounceTimer) {
         clearTimeout(debounceTimer);
-        console.log('[BangumiSync] 重置防抖定时器');
+        BS.Logger.debug('重置防抖定时器');
       }
 
       // 重置取消标志
@@ -1784,7 +1798,7 @@
         .then(function(res) {
           // 如果已被取消，忽略结果
           if (isCancelled) {
-            console.log('[BangumiSync] 搜索结果已过期，忽略');
+            BS.Logger.debug('搜索结果已过期，忽略');
             return;
           }
 
@@ -1810,7 +1824,7 @@
         .catch(function(err) {
           // 如果已被取消，忽略错误
           if (isCancelled) {
-            console.log('[BangumiSync] 搜索错误已过期，忽略');
+            BS.Logger.debug('搜索错误已过期，忽略');
             return;
           }
 
@@ -1886,7 +1900,7 @@
         return;
       }
 
-      BS.Orchestrator.sync(best.subject.id, ep, info);
+      BS.Orchestrator.sync(best.subject.id, ep);
     }
 
     function handlePlayEvent() {

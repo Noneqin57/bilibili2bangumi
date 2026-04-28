@@ -26,7 +26,6 @@ const USERSCRIPT_HEADER = `// ==UserScript==
 // @grant        GM_setValue
 // @grant        GM_getValue
 // @grant        GM_xmlhttpRequest
-// @grant        GM_registerMenuCommand
 // @grant        GM_addStyle
 // @connect      api.bgm.tv
 // @run-at       document-idle
@@ -38,6 +37,10 @@ const USERSCRIPT_HEADER = `// ==UserScript==
 `;
 
 function readFile(filePath) {
+  if (!fs.existsSync(filePath)) {
+    console.error('✗ 文件不存在: ' + filePath);
+    process.exit(1);
+  }
   return fs.readFileSync(filePath, 'utf-8');
 }
 

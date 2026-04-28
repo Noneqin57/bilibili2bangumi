@@ -71,7 +71,7 @@ BS.BangumiAPI = (function () {
                 if ((res.status >= 500 || res.status === 0) && retryAttempt < MAX_RETRIES) {
                   retryAttempt++;
                   var delay = RETRY_DELAY_BASE * Math.pow(2, retryAttempt - 1);
-                  console.log('[BangumiSync] 请求失败，' + delay + 'ms 后第 ' + retryAttempt + ' 次重试');
+                  BS.Logger.warn('请求失败，' + delay + 'ms 后第 ' + retryAttempt + ' 次重试');
                   setTimeout(doRequest, delay);
                 } else {
                   try {
@@ -87,7 +87,7 @@ BS.BangumiAPI = (function () {
               if (retryAttempt < MAX_RETRIES) {
                 retryAttempt++;
                 var delay = RETRY_DELAY_BASE * Math.pow(2, retryAttempt - 1);
-                console.log('[BangumiSync] 网络错误，' + delay + 'ms 后第 ' + retryAttempt + ' 次重试');
+                BS.Logger.warn('网络错误，' + delay + 'ms 后第 ' + retryAttempt + ' 次重试');
                 setTimeout(doRequest, delay);
               } else {
                 reject(new Error('网络请求失败，已重试' + MAX_RETRIES + '次'));
@@ -97,7 +97,7 @@ BS.BangumiAPI = (function () {
               if (retryAttempt < MAX_RETRIES) {
                 retryAttempt++;
                 var delay = RETRY_DELAY_BASE * Math.pow(2, retryAttempt - 1);
-                console.log('[BangumiSync] 请求超时，' + delay + 'ms 后第 ' + retryAttempt + ' 次重试');
+                BS.Logger.warn('请求超时，' + delay + 'ms 后第 ' + retryAttempt + ' 次重试');
                 setTimeout(doRequest, delay);
               } else {
                 reject(new Error('请求超时，请检查网络连接，已重试' + MAX_RETRIES + '次'));

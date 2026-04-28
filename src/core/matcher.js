@@ -21,6 +21,9 @@ BS.Matcher = (function () {
 
   var SEASON_MARKERS = /^(\d{1,2})\s*月\s*(新番)?$/i;
 
+  // 常见视频分辨率，避免被误识别为集数
+  var COMMON_RESOLUTIONS = { 144:1, 240:1, 360:1, 480:1, 540:1, 720:1, 1080:1, 1440:1, 2160:1, 4320:1 };
+
   var CACHE_SIZE = 20;
   var cache = {};
   var cacheKeys = [];
@@ -45,8 +48,13 @@ BS.Matcher = (function () {
     for (var i = 0; i < EP_PATTERNS.length; i++) {
       var m = title.match(EP_PATTERNS[i].regex);
       if (m) {
+        var ep = parseInt(m[1], 10);
+        // 跳过常见分辨率数字，避免 [1080]、[720] 等被误识别为集数
+        if (COMMON_RESOLUTIONS.hasOwnProperty(ep)) {
+          continue;
+        }
         var result = {
-          ep: parseInt(m[1], 10),
+          ep: ep,
           pattern: EP_PATTERNS[i].name
         };
         setCache('ep:' + title, result);

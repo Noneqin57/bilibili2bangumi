@@ -87,14 +87,14 @@ BS.AutoSync = (function () {
       // 标记为已取消，实际请求会继续但结果会被忽略
       currentSearchPromise = null;
     }
-    console.log('[BangumiSync] 已取消待处理的搜索');
+    BS.Logger.debug('已取消待处理的搜索');
   }
 
   function debouncedSearch() {
     // 取消之前的防抖定时器
     if (debounceTimer) {
       clearTimeout(debounceTimer);
-      console.log('[BangumiSync] 重置防抖定时器');
+      BS.Logger.debug('重置防抖定时器');
     }
 
     // 重置取消标志
@@ -179,7 +179,7 @@ BS.AutoSync = (function () {
       .then(function(res) {
         // 如果已被取消，忽略结果
         if (isCancelled) {
-          console.log('[BangumiSync] 搜索结果已过期，忽略');
+          BS.Logger.debug('搜索结果已过期，忽略');
           return;
         }
 
@@ -205,7 +205,7 @@ BS.AutoSync = (function () {
       .catch(function(err) {
         // 如果已被取消，忽略错误
         if (isCancelled) {
-          console.log('[BangumiSync] 搜索错误已过期，忽略');
+          BS.Logger.debug('搜索错误已过期，忽略');
           return;
         }
 
@@ -281,7 +281,7 @@ BS.AutoSync = (function () {
       return;
     }
 
-    BS.Orchestrator.sync(best.subject.id, ep, info);
+    BS.Orchestrator.sync(best.subject.id, ep);
   }
 
   function handlePlayEvent() {

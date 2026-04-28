@@ -68,7 +68,7 @@ BS.BiliWatcher = (function () {
     if (typeof BS.VideoObserver !== 'undefined') {
       BS.VideoObserver.init();
     }
-    console.log('[BangumiSync] v__VERSION__ 已加载');
+    BS.Logger.info('v__VERSION__ 已加载');
   }
 
   return {

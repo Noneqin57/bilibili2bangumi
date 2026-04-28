@@ -1,8 +1,15 @@
 // ===== UI 模块 =====
 BS.UI = (function () {
-  var ballState = {
-    hidden: false
-  };
+  // HTML 转义，防止 XSS
+  function escHTML(str) {
+    if (!str && str !== 0) return '';
+    return String(str)
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&#39;');
+  }
 
   // 样式
   var STYLES = [
@@ -152,19 +159,19 @@ BS.UI = (function () {
 
     function handleFullscreenChange() {
       if (!BS.Config.getHideOnWide()) {
-        console.log('[BangumiSync] 宽屏隐藏功能已关闭');
+        BS.Logger.debug('宽屏隐藏功能已关闭');
         return;
       }
 
       var isWide = isBiliPlayerWide();
-      console.log('[BangumiSync] 宽屏检测:', isWide);
+      BS.Logger.debug('宽屏检测: ' + isWide);
 
       if (isWide) {
         container.classList.add('bgm-fullscreen-hidden');
-        console.log('[BangumiSync] 已隐藏悬浮球');
+        BS.Logger.debug('已隐藏悬浮球');
       } else {
         container.classList.remove('bgm-fullscreen-hidden');
-        console.log('[BangumiSync] 已显示悬浮球');
+        BS.Logger.debug('已显示悬浮球');
       }
     }
 
@@ -182,7 +189,7 @@ BS.UI = (function () {
             className.indexOf('wide') !== -1 ||
             title.indexOf('全屏') !== -1 ||
             title.indexOf('宽屏') !== -1) {
-          console.log('[BangumiSync] 检测到全屏/宽屏按钮点击');
+          BS.Logger.debug('检测到全屏/宽屏按钮点击');
           setTimeout(handleFullscreenChange, 300);
           setTimeout(handleFullscreenChange, 600);
         }
@@ -194,13 +201,13 @@ BS.UI = (function () {
       var observer = new MutationObserver(function(mutations) {
         mutations.forEach(function(mutation) {
           if (mutation.type === 'attributes' && mutation.attributeName === 'class') {
-            console.log('[BangumiSync] 播放器类名变化:', player.className);
+            BS.Logger.debug('播放器类名变化: ' + player.className);
             handleFullscreenChange();
           }
         });
       });
       observer.observe(player, { attributes: true, attributeFilter: ['class'] });
-      console.log('[BangumiSync] 已监听播放器类名变化');
+      BS.Logger.debug('已监听播放器类名变化');
     }
 
     setTimeout(handleFullscreenChange, 500);
@@ -350,10 +357,10 @@ BS.UI = (function () {
       var score = item.score ? '评分: ' + item.score : '';
       var date = item.date || '';
       return [
-        '<div class="bgm-result-item" data-index="' + idx + '" data-id="' + item.id + '" style="padding:12px 16px;border-bottom:1px solid #eee;cursor:pointer;transition:background 0.2s">',
-        '<div style="font-weight:600;font-size:15px">' + name + '</div>',
-        origName ? '<div style="font-size:12px;color:#666;margin-top:2px">' + origName + '</div>' : '',
-        '<div style="font-size:12px;color:#999;margin-top:4px">' + score + (score && date ? ' | ' : '') + date + '</div>',
+        '<div class="bgm-result-item" data-index="' + idx + '" data-id="' + escHTML(String(item.id)) + '" style="padding:12px 16px;border-bottom:1px solid #eee;cursor:pointer;transition:background 0.2s">',
+        '<div style="font-weight:600;font-size:15px">' + escHTML(name) + '</div>',
+        origName ? '<div style="font-size:12px;color:#666;margin-top:2px">' + escHTML(origName) + '</div>' : '',
+        '<div style="font-size:12px;color:#999;margin-top:4px">' + escHTML(score) + (score && date ? ' | ' : '') + escHTML(date) + '</div>',
         '</div>'
       ].join('');
     }).join('');
@@ -417,11 +424,11 @@ BS.UI = (function () {
       '<div style="padding:20px">',
       '<div style="margin-bottom:16px">',
       '<div style="font-size:13px;color:#666;margin-bottom:4px">番剧</div>',
-      '<div style="font-weight:600">' + subjectName + '</div>',
+      '<div style="font-weight:600">' + escHTML(subjectName) + '</div>',
       '</div>',
       '<div style="margin-bottom:16px">',
       '<div style="font-size:13px;color:#666;margin-bottom:4px">视频标题</div>',
-      '<div style="font-size:13px;color:#333;background:#f5f5f5;padding:8px;border-radius:4px">' + videoInfo.title + '</div>',
+      '<div style="font-size:13px;color:#333;background:#f5f5f5;padding:8px;border-radius:4px">' + escHTML(videoInfo.title) + '</div>',
       '</div>',
       '<div style="margin-bottom:20px">',
       '<div style="font-size:13px;color:#666;margin-bottom:4px">' + detectedText + '</div>',
@@ -474,7 +481,7 @@ BS.UI = (function () {
         BS.Config.confirmSubject(videoInfo.upName, cleanTitle, subject.id);
       }
 
-      BS.Orchestrator.sync(subject.id, ep, videoInfo);
+      BS.Orchestrator.sync(subject.id, ep);
     });
 
     document.getElementById('bgm-ep-input').addEventListener('keypress', function(e) {
@@ -576,8 +583,8 @@ BS.UI = (function () {
       return [
         '<div style="display:flex;justify-content:space-between;align-items:center;padding:8px 0;border-bottom:1px solid #eee">',
         '<div>',
-        '<div style="font-weight:500">' + (up.upName || '未命名') + '</div>',
-        up.uid ? '<div style="font-size:12px;color:#999">UID: ' + up.uid + '</div>' : '',
+        '<div style="font-weight:500">' + escHTML(up.upName || '未命名') + '</div>',
+        up.uid ? '<div style="font-size:12px;color:#999">UID: ' + escHTML(String(up.uid)) + '</div>' : '',
         '</div>',
         '<button class="bgm-remove-up" data-index="' + idx + '" style="padding:4px 10px;border:1px solid #ff4d4f;border-radius:4px;color:#ff4d4f;background:#fff;cursor:pointer;font-size:12px">删除</button>',
         '</div>'
@@ -592,7 +599,7 @@ BS.UI = (function () {
       '<div style="padding:20px;max-height:60vh;overflow:auto">',
       '<div style="margin-bottom:20px">',
       '<div style="font-size:13px;color:#666;margin-bottom:8px">Access Token</div>',
-      '<input id="bgm-token-input" type="text" value="' + configs.token + '" placeholder="在 next.bgm.tv/demo/access-token 生成" style="width:100%;padding:10px;border:1px solid #ddd;border-radius:6px;font-size:14px;box-sizing:border-box">',
+      '<input id="bgm-token-input" type="text" value="' + escHTML(configs.token) + '" placeholder="在 next.bgm.tv/demo/access-token 生成" style="width:100%;padding:10px;border:1px solid #ddd;border-radius:6px;font-size:14px;box-sizing:border-box">',
       '<div style="font-size:12px;color:#999;margin-top:4px">Token 地址: <a href="https://next.bgm.tv/demo/access-token" target="_blank" style="color:#fb7299">next.bgm.tv/demo/access-token</a></div>',
       '</div>',
       '<div style="margin-bottom:20px">',

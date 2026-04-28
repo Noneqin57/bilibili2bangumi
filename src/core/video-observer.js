@@ -46,7 +46,7 @@ BS.VideoObserver = (function () {
       if (hasTriggered) return;
       hasTriggered = true;
 
-      console.log('[BangumiSync] 视频开始播放，触发自动同步检测');
+      BS.Logger.debug('视频开始播放，触发自动同步检测');
 
       if (typeof BS.AutoSync !== 'undefined') {
         BS.AutoSync.handlePlayEvent();

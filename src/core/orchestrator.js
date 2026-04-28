@@ -1,6 +1,6 @@
 // ===== Orchestrator 模块 =====
 BS.Orchestrator = (function () {
-  function sync(subjectId, ep, videoInfo) {
+  function sync(subjectId, ep) {
     var token = BS.Config.getAccessToken();
     if (!token) {
       BS.UI.showToast('未配置 Bangumi Token', 'error', 5000);
