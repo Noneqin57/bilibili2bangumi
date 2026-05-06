@@ -175,17 +175,19 @@
     }
 
     function removeUp(identifier) {
+      if (!identifier) return;
       var list = getUpWhitelist();
       var newList = list.filter(function(up) {
-        return up.upName !== identifier && up.uid !== identifier;
+        return up.upName !== identifier && (!up.uid || up.uid !== identifier);
       });
       setUpWhitelist(newList);
     }
 
     function getUpConfig(identifier) {
+      if (!identifier) return null;
       var list = getUpWhitelist();
       for (var i = 0; i < list.length; i++) {
-        if (list[i].upName === identifier || list[i].uid === identifier) {
+        if (list[i].upName === identifier || (list[i].uid && list[i].uid === identifier)) {
           return list[i];
         }
       }
@@ -1021,7 +1023,7 @@
         return;
       }
 
-      var upConfig = BS.Config.getUpConfig(info.upName) || BS.Config.getUpConfig(info.uid);
+      var upConfig = BS.Config.getUpConfig(info.upName) || (info.uid && BS.Config.getUpConfig(info.uid));
       if (!upConfig) {
         showToast('当前 UP 不在白名单中', 'error');
         return;
@@ -1270,7 +1272,7 @@
         return;
       }
 
-      var existing = BS.Config.getUpConfig(info.upName) || BS.Config.getUpConfig(info.uid);
+      var existing = BS.Config.getUpConfig(info.upName) || (info.uid && BS.Config.getUpConfig(info.uid));
       if (existing) {
         showToast('UP 已在白名单中: ' + existing.upName, 'info');
         return;
@@ -2031,7 +2033,7 @@
       var info = BS.BiliWatcher.extractVideoInfo();
       if (!info.upName) return false;
 
-      var upConfig = BS.Config.getUpConfig(info.upName) || BS.Config.getUpConfig(info.uid);
+      var upConfig = BS.Config.getUpConfig(info.upName) || (info.uid && BS.Config.getUpConfig(info.uid));
       if (!upConfig) return false;
 
       var epResult = BS.Matcher.extractEpisode(info.title);

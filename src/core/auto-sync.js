@@ -156,7 +156,7 @@ BS.AutoSync = (function () {
     var info = BS.BiliWatcher.extractVideoInfo();
     if (!info.upName) return false;
 
-    var upConfig = BS.Config.getUpConfig(info.upName) || BS.Config.getUpConfig(info.uid);
+    var upConfig = BS.Config.getUpConfig(info.upName) || (info.uid && BS.Config.getUpConfig(info.uid));
     if (!upConfig) return false;
 
     var epResult = BS.Matcher.extractEpisode(info.title);

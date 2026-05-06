@@ -411,7 +411,7 @@ BS.UI = (function () {
       return;
     }
 
-    var upConfig = BS.Config.getUpConfig(info.upName) || BS.Config.getUpConfig(info.uid);
+    var upConfig = BS.Config.getUpConfig(info.upName) || (info.uid && BS.Config.getUpConfig(info.uid));
     if (!upConfig) {
       showToast('当前 UP 不在白名单中', 'error');
       return;
@@ -660,7 +660,7 @@ BS.UI = (function () {
       return;
     }
 
-    var existing = BS.Config.getUpConfig(info.upName) || BS.Config.getUpConfig(info.uid);
+    var existing = BS.Config.getUpConfig(info.upName) || (info.uid && BS.Config.getUpConfig(info.uid));
     if (existing) {
       showToast('UP 已在白名单中: ' + existing.upName, 'info');
       return;

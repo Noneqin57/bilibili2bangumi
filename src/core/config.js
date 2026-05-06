@@ -71,17 +71,19 @@ BS.Config = (function () {
   }
 
   function removeUp(identifier) {
+    if (!identifier) return;
     var list = getUpWhitelist();
     var newList = list.filter(function(up) {
-      return up.upName !== identifier && up.uid !== identifier;
+      return up.upName !== identifier && (!up.uid || up.uid !== identifier);
     });
     setUpWhitelist(newList);
   }
 
   function getUpConfig(identifier) {
+    if (!identifier) return null;
     var list = getUpWhitelist();
     for (var i = 0; i < list.length; i++) {
-      if (list[i].upName === identifier || list[i].uid === identifier) {
+      if (list[i].upName === identifier || (list[i].uid && list[i].uid === identifier)) {
         return list[i];
       }
     }
